@@ -321,7 +321,7 @@ export default function ManualModal({
             </div>
             <div>
               <p className="text-white font-bold text-sm leading-tight">사용자 매뉴얼</p>
-              <p className="text-white/35 text-[10px]">해양 종자 살포 관제 시스템 v1.3</p>
+              <p className="text-white/35 text-[10px]">해양 종자 살포 관제 시스템 v1.5</p>
             </div>
           </div>
           <button
@@ -411,7 +411,7 @@ export default function ManualModal({
               웹 시스템 문의: {CONTACTS[0].name} ({CONTACTS[0].phone})
             </p>
             <p className="text-[10px] text-white/15 mt-2">
-              사업자등록번호 {BIZ_NO} · v1.3 · 2026
+              사업자등록번호 {BIZ_NO} · v1.5 · 2026
             </p>
           </div>
         </div>
