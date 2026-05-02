@@ -1,3 +1,44 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* Leaflet — 기본 z-index가 대시보드 오버레이보다 위로 올라오지 않게 */
+.leaflet-container {
+  font-family: inherit;
+  background: #031928;
+  height: 100%;
+  width: 100%;
+  min-height: 12rem;
+}
+
+.marine-ops-map-root .leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.marine-ops-map-root .leaflet-control-zoom a {
+  color: #0b2545;
+}
+
+.marine-vessel-divicon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.marine-vessel-pin {
+  width: 32px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marine-vessel-hull {
+  width: 14px;
+  height: 22px;
+  margin-top: -4px;
+  background: linear-gradient(180deg, #ff8a1f 0%, #ea580c 100%);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 45% 45%;
+  box-shadow: 0 0 8px rgba(255, 138, 31, 0.65);
+}

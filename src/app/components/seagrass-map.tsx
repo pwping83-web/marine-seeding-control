@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useMemo, useState } from "react";
 import {
   Ship,
   MapPin,
@@ -10,6 +10,8 @@ import {
   Minus,
   Crosshair,
 } from "lucide-react";
+import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "../geo/koreaOpsArea";
+import { MarineLeafletMap } from "./MarineLeafletMap";
 
 export type DropPoint = {
   id: string;
@@ -29,60 +31,81 @@ type Props = {
   todayCount: number;
 };
 
-/**
- * Empty container for a Map API (Google Maps, Kakao Map, Mapbox, etc.).
- *
- * Mount the map inside the #map div via a useEffect:
- *
- *   // Google Maps
- *   const map = new google.maps.Map(mapRef.current!, {
- *     center: { lat: 34.582, lng: 128.719 },
- *     zoom: 13,
- *   });
- *
- *   // Kakao Maps
- *   const map = new kakao.maps.Map(mapRef.current!, {
- *     center: new kakao.maps.LatLng(34.582, 128.719),
- *     level: 5,
- *   });
- *
- * Then plot `drops`, `vessel`, and `path` as Markers / Polylines.
- */
-export function SeagrassMap({ drops, connected, todayCount }: Props) {
-  const mapRef = useRef<HTMLDivElement>(null);
+/** App.tsx 시뮬 좌표 ↔ 위경도 (App.tsx와 동일 스케일) */
+const BASE_LAT = OPS_AREA_CENTER.lat;
+const BASE_LNG = OPS_AREA_CENTER.lng;
+const APP_CY = 350;
+const APP_CX = 500;
+const APP_S = 0.0005;
+
+function xyToLatLng(x: number, y: number) {
+  return {
+    lat: BASE_LAT + (y - APP_CY) * APP_S + SIM_SEA_OFFSET.lat,
+    lng: BASE_LNG + (x - APP_CX) * APP_S + SIM_SEA_OFFSET.lng,
+  };
+}
+
+function dropStyle(status: DropPoint["status"]) {
+  switch (status) {
+    case "Pending":
+      return { fill: "#fbbf24", stroke: "#fffbeb", pulse: "#fcd34d" };
+    case "Failed":
+      return { fill: "#ef4444", stroke: "#fecaca", pulse: "#f87171" };
+    default:
+      return { fill: "#f97316", stroke: "#ffedd5", pulse: "#fb923c" };
+  }
+}
+
+export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Props) {
+  const [zoomRail, setZoomRail] = useState(0);
+  const [fitNonce, setFitNonce] = useState(1);
+
+  const vesselLL = useMemo(() => xyToLatLng(vessel.x, vessel.y), [vessel.x, vessel.y]);
+
+  const pathLatLng = useMemo(
+    () =>
+      path.map((p) => {
+        const ll = xyToLatLng(p.x, p.y);
+        return [ll.lat, ll.lng] as [number, number];
+      }),
+    [path]
+  );
+
+  const leafletDrops = useMemo(
+    () =>
+      drops.map((d, i) => {
+        const st = dropStyle(d.status);
+        const highlight = i === drops.length - 1;
+        return {
+          id: d.id,
+          label: d.id,
+          lat: d.lat,
+          lng: d.lng,
+          highlight,
+          ...st,
+        };
+      }),
+    [drops]
+  );
+
+  const vesselPos = useMemo(
+    () => ({ lat: vesselLL.lat, lng: vesselLL.lng, heading: vessel.heading }),
+    [vesselLL.lat, vesselLL.lng, vessel.heading]
+  );
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-      {/* === MAP API MOUNT POINT === */}
-      <div
-        id="map"
-        ref={mapRef}
-        className="absolute inset-0 w-full h-full bg-slate-200"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(11,37,69,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(11,37,69,0.05) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#0B2545]/5 border border-[#0B2545]/15 mb-3">
-              <MapPin className="w-6 h-6 text-[#0B2545]/50" />
-            </div>
-            <div className="text-slate-500" style={{ fontSize: 13, fontWeight: 500 }}>
-              Map API container
-            </div>
-            <div className="text-slate-400 mt-1" style={{ fontSize: 11 }}>
-              Initialize Google Maps / Kakao Map on{" "}
-              <code className="bg-slate-200 px-1 py-0.5 rounded">#map</code>
-            </div>
-            <div className="text-slate-400 mt-2 tabular-nums" style={{ fontSize: 11 }}>
-              {drops.length} drops · ready to render
-            </div>
-          </div>
-        </div>
+      <div className="absolute inset-0 z-0">
+        <MarineLeafletMap
+          basemap="dark"
+          center={[BASE_LAT, BASE_LNG]}
+          zoomRail={zoomRail}
+          fitNonce={fitNonce}
+          drops={leafletDrops}
+          vessel={vesselPos}
+          pathLatLng={pathLatLng}
+        />
       </div>
-      {/* === /MAP API MOUNT POINT === */}
 
       {/* Floating Status Panel */}
       <div className="absolute top-4 right-4 w-72 rounded-lg border border-slate-200 bg-white/95 backdrop-blur-md shadow-xl p-4 z-10">
@@ -137,7 +160,7 @@ export function SeagrassMap({ drops, connected, todayCount }: Props) {
                 Vessel — RV Poseidon
               </div>
               <div className="text-slate-700 tabular-nums" style={{ fontSize: 13 }}>
-                34.5821° N, 128.7194° E
+                {vesselPos.lat.toFixed(4)}° N, {vesselPos.lng.toFixed(4)}° E
               </div>
             </div>
           </div>
@@ -146,43 +169,53 @@ export function SeagrassMap({ drops, connected, todayCount }: Props) {
 
       {/* Map navigation controls */}
       <div className="absolute top-4 left-4 flex flex-col items-center gap-3 z-10">
-        {/* Zoom pill */}
         <div className="flex flex-col bg-white rounded-full shadow-[0_4px_14px_rgba(11,37,69,0.12)] border border-slate-200/80 overflow-hidden">
           <button
+            type="button"
             aria-label="Zoom in"
+            onClick={() => setZoomRail((z) => Math.min(4, z + 1))}
             className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
           >
             <Plus className="w-4 h-4" strokeWidth={2.25} />
           </button>
           <div className="mx-2.5 h-px bg-slate-200" />
           <button
+            type="button"
             aria-label="Zoom out"
+            onClick={() => setZoomRail((z) => Math.max(0, z - 1))}
             className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
           >
             <Minus className="w-4 h-4" strokeWidth={2.25} />
           </button>
         </div>
 
-        {/* Recenter */}
         <button
+          type="button"
           aria-label="Recenter map"
+          onClick={() => {
+            setZoomRail(0);
+            setFitNonce((n) => n + 1);
+          }}
           className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-[0_4px_14px_rgba(11,37,69,0.12)] border border-slate-200/80 text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
         >
           <Crosshair className="w-4 h-4" strokeWidth={2} />
         </button>
 
-        {/* Secondary actions */}
         <div className="flex flex-col bg-white rounded-full shadow-[0_4px_14px_rgba(11,37,69,0.12)] border border-slate-200/80 overflow-hidden">
           <button
+            type="button"
             aria-label="Layers"
-            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors cursor-not-allowed"
+            disabled
           >
             <Layers className="w-4 h-4" strokeWidth={2} />
           </button>
           <div className="mx-2.5 h-px bg-slate-200" />
           <button
+            type="button"
             aria-label="Fullscreen"
-            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors cursor-not-allowed"
+            disabled
           >
             <Maximize2 className="w-4 h-4" strokeWidth={2} />
           </button>

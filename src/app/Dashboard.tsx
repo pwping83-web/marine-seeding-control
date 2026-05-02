@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
+import { MarineLeafletMap } from "./components/MarineLeafletMap";
+import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -64,25 +66,26 @@ interface SignalEntry {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BASE_LAT = 34.582;
-const BASE_LNG = 128.719;
+const BASE_LAT = OPS_AREA_CENTER.lat;
+const BASE_LNG = OPS_AREA_CENTER.lng;
 const MAP_W = 940;
 const MAP_H = 520;
 const VESSEL_NAME = "제3해양살포함";
 
+/** 화면 좌표 루프 — 지도 중심(470,260) 부근에 몰아 남해 시연 구역만 최대 확대되게 함 */
 const WAYPOINTS = [
-  { x: 100, y: 300 },
-  { x: 220, y: 275 },
-  { x: 360, y: 288 },
-  { x: 500, y: 268 },
-  { x: 640, y: 278 },
-  { x: 780, y: 262 },
-  { x: 860, y: 310 },
-  { x: 820, y: 380 },
-  { x: 640, y: 400 },
-  { x: 460, y: 415 },
-  { x: 280, y: 395 },
-  { x: 120, y: 355 },
+  { x: 400, y: 285 },
+  { x: 435, y: 268 },
+  { x: 475, y: 275 },
+  { x: 515, y: 262 },
+  { x: 545, y: 278 },
+  { x: 530, y: 298 },
+  { x: 505, y: 312 },
+  { x: 455, y: 308 },
+  { x: 420, y: 292 },
+  { x: 448, y: 278 },
+  { x: 488, y: 270 },
+  { x: 462, y: 288 },
 ];
 
 const WIND_ARROW_POS = [
@@ -111,8 +114,12 @@ function fmt(d: Date) {
 
 function xyToLatLng(x: number, y: number): { lat: number; lng: number } {
   return {
-    lat: parseFloat((BASE_LAT + (MAP_H / 2 - y) * 0.00055).toFixed(6)),
-    lng: parseFloat((BASE_LNG + (x - MAP_W / 2) * 0.00048).toFixed(6)),
+    lat: parseFloat(
+      (BASE_LAT + (MAP_H / 2 - y) * 0.00055 + SIM_SEA_OFFSET.lat).toFixed(6)
+    ),
+    lng: parseFloat(
+      (BASE_LNG + (x - MAP_W / 2) * 0.00048 + SIM_SEA_OFFSET.lng).toFixed(6)
+    ),
   };
 }
 
@@ -454,440 +461,6 @@ function SignalPanel({
   );
 }
 
-// ─── MapPlaceholder ───────────────────────────────────────────────────────────
-
-function MapPlaceholder({
-  drops,
-  vessel,
-  path,
-  zoom,
-  highlightDropId,
-  weather,
-}: {
-  drops: SeedDrop[];
-  vessel: Vessel;
-  path: { x: number; y: number }[];
-  zoom: number;
-  highlightDropId?: string;
-  weather: WeatherState;
-}) {
-  const scale = 1 + zoom * 0.12;
-
-  return (
-    <div className="absolute inset-0 overflow-hidden bg-[#031928]">
-      {/* Animation keyframes injected once */}
-      <style>{`
-        @keyframes waveSlide {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
-        @keyframes windPulse {
-          0%,100% { opacity: 0.30; transform: scale(0.95); }
-          50%      { opacity: 0.75; transform: scale(1.05); }
-        }
-        @keyframes sonarPing {
-          0%   { r: 8; opacity: 0.7; }
-          100% { r: 50; opacity: 0; }
-        }
-        @keyframes scanLine {
-          0%   { top: -4px; opacity: 0; }
-          5%   { opacity: 0.55; }
-          95%  { opacity: 0.55; }
-          100% { top: 100%; opacity: 0; }
-        }
-      `}</style>
-
-      {/* Zoomable map layer */}
-      <div
-        className="absolute inset-0 will-change-transform"
-        style={{
-          transform: `scale(${scale})`,
-          transformOrigin: "50% 50%",
-          transition: "transform 0.4s ease",
-        }}
-      >
-        {/* Ocean gradient */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `linear-gradient(180deg,
-              rgba(18,95,115,0.55) 0%,
-              rgba(10,70,100,0.85) 18%,
-              #073654 32%,
-              #062a4e 55%,
-              #031928 100%)`,
-          }}
-        />
-
-        {/* Land + coastline */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          preserveAspectRatio="none"
-          style={{ pointerEvents: "none" }}
-        >
-          <defs>
-            <linearGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4a6b4f" />
-              <stop offset="55%" stopColor="#2d4532" />
-              <stop offset="100%" stopColor="#1e3024" />
-            </linearGradient>
-            <linearGradient id="beachGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8b9a7a" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#5a7a6a" stopOpacity="0.15" />
-            </linearGradient>
-            <filter id="landShadow" x="-5%" y="-5%" width="110%" height="120%">
-              <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#000" floodOpacity="0.4" />
-            </filter>
-          </defs>
-          <path
-            fill="url(#landGrad)"
-            stroke="#3d5540"
-            strokeWidth="1.2"
-            filter="url(#landShadow)"
-            d={`M 0 0 L ${MAP_W} 0 L ${MAP_W} 118
-                C 860 108 740 98 600 102
-                C 480 106 380 88 260 96
-                C 140 104 0 118 0 132 Z`}
-          />
-          <path
-            fill="none"
-            stroke="#6a9088"
-            strokeWidth="2"
-            strokeOpacity="0.45"
-            d={`M 0 132 C 140 104 260 96 380 88 C 480 84 600 102 740 98 C 820 100 ${MAP_W} 118`}
-          />
-          <path
-            fill="url(#beachGrad)"
-            d={`M 0 132 C 140 108 260 100 380 92 C 500 88 620 104 740 100 C 820 102 ${MAP_W} 120
-                L ${MAP_W} 138 C 860 128 700 118 520 122 C 340 128 160 138 0 152 Z`}
-          />
-          {/* Islands */}
-          <ellipse cx="720" cy="108" rx="14" ry="8" fill="#2a3d30" stroke="#3d5540" strokeWidth="0.8" opacity="0.95" />
-          <ellipse cx="340" cy="100" rx="10" ry="6" fill="#2a3d30" stroke="#3d5540" strokeWidth="0.8" opacity="0.9" />
-          <path fill="#243528" stroke="#3a5040" strokeWidth="0.6" d="M 180 94 L 198 90 L 205 98 L 192 102 Z" />
-          <text
-            x="24"
-            y="78"
-            fill="rgba(255,255,255,0.38)"
-            style={{ fontSize: "13px", fontWeight: 600, letterSpacing: "0.06em" }}
-          >
-            대한민국 연안(시연)
-          </text>
-        </svg>
-
-        {/* Grid overlay */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.08]" style={{ pointerEvents: "none" }}>
-          <defs>
-            <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-              <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#40E0D0" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-
-        {/* Depth contours */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          preserveAspectRatio="none"
-          style={{ pointerEvents: "none", opacity: 0.18 }}
-        >
-          <ellipse cx="48%" cy="68%" rx="42%" ry="22%" fill="none" stroke="#40E0D0" strokeWidth="1" strokeDasharray="8 5" />
-          <ellipse cx="48%" cy="72%" rx="30%" ry="14%" fill="none" stroke="#40E0D0" strokeWidth="0.8" strokeDasharray="6 6" />
-          <ellipse cx="48%" cy="77%" rx="17%" ry="7%"  fill="none" stroke="#40E0D0" strokeWidth="0.5" strokeDasharray="4 8" />
-        </svg>
-
-        {/* Wind direction arrows */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          style={{ pointerEvents: "none" }}
-        >
-          {WIND_ARROW_POS.map((pos, i) => (
-            <g
-              key={i}
-              transform={`translate(${pos.x}, ${pos.y})`}
-              style={{
-                animation: `windPulse 3.2s ease-in-out ${i * 0.38}s infinite`,
-                transformOrigin: `${pos.x}px ${pos.y}px`,
-              }}
-            >
-              <g transform={`rotate(${weather.windDir})`}>
-                <polygon points="0,-11 2.8,3 0,-2 -2.8,3" fill="#40E0D0" opacity="0.6" />
-                <line x1="0" y1="3" x2="0" y2="10" stroke="#40E0D0" strokeWidth="1.2" opacity="0.35" />
-              </g>
-            </g>
-          ))}
-        </svg>
-
-        {/* SVG Layer 1: sonar + vessel trail (behind drops) */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          style={{ pointerEvents: "none" }}
-        >
-          {/* ── SONAR SWEEP (opacity reduced so drops show through) ── */}
-          <g opacity="0.7">
-            {[42, 72, 102].map((r, i) => (
-              <circle
-                key={r}
-                cx={vessel.x}
-                cy={vessel.y}
-                r={r}
-                fill="none"
-                stroke="#40E0D0"
-                strokeWidth="0.5"
-                strokeDasharray="4 8"
-                opacity={0.08 - i * 0.02}
-              />
-            ))}
-            <circle cx={vessel.x} cy={vessel.y} r="8" fill="none" stroke="#40E0D0" strokeWidth="0.8" opacity="0">
-              <animate attributeName="r" from="8" to="48" dur="3.5s" repeatCount="indefinite" />
-              <animate attributeName="opacity" values="0.4;0" dur="3.5s" repeatCount="indefinite" />
-            </circle>
-            <line
-              x1={vessel.x} y1={vessel.y}
-              x2={vessel.x} y2={vessel.y - 102}
-              stroke="#40E0D0" strokeWidth="1.5" opacity="0.55"
-            >
-              <animateTransform attributeName="transform" type="rotate"
-                from={`0 ${vessel.x} ${vessel.y}`} to={`360 ${vessel.x} ${vessel.y}`}
-                dur="5s" repeatCount="indefinite" />
-            </line>
-            {[20, 40].map((offset, i) => (
-              <line key={offset}
-                x1={vessel.x} y1={vessel.y}
-                x2={vessel.x} y2={vessel.y - 102}
-                stroke="#40E0D0" strokeWidth="1" opacity={0.18 - i * 0.07}
-              >
-                <animateTransform attributeName="transform" type="rotate"
-                  from={`${-offset} ${vessel.x} ${vessel.y}`}
-                  to={`${360 - offset} ${vessel.x} ${vessel.y}`}
-                  dur="5s" repeatCount="indefinite" />
-              </line>
-            ))}
-          </g>
-
-          {/* Vessel trail */}
-          {path.length > 1 && (
-            <polyline
-              points={path.map((p) => `${p.x},${p.y}`).join(" ")}
-              fill="none"
-              stroke="#40E0D0"
-              strokeWidth="1.6"
-              strokeOpacity="0.4"
-              strokeDasharray="6 4"
-            />
-          )}
-        </svg>
-
-        {/* SVG Layer 2: seed drops + vessel (always on top) */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          style={{ pointerEvents: "none" }}
-        >
-          <defs>
-            {/* Glow filter for seed drops */}
-            <filter id="dropGlow" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="2.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* Seed drops — each with dark backdrop + halo + main dot */}
-          {drops.map((d) => {
-            const px = MAP_W / 2 + (d.lng - BASE_LNG) / 0.00048;
-            const py = MAP_H / 2 - (d.lat - BASE_LAT) / 0.00055;
-            const isNew = highlightDropId !== undefined && d.id === highlightDropId;
-            const col = dropVisualColors(d);
-            return (
-              <g key={d.id} filter="url(#dropGlow)">
-                {/* Outer pulse ring for newest drop */}
-                {isNew && (
-                  <circle cx={px} cy={py} r="14" fill="none" stroke={col.pulse} strokeWidth="2.5" opacity="0">
-                    <animate attributeName="r" from="7" to="24" dur="1.4s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" from="0.9" to="0" dur="1.4s" repeatCount="indefinite" />
-                  </circle>
-                )}
-                {/* Dark backdrop — punches through sonar lines */}
-                <circle cx={px} cy={py} r={isNew ? 11 : 9} fill="rgba(3,20,38,0.72)" />
-                {/* Soft color halo */}
-                <circle cx={px} cy={py} r={isNew ? 9.5 : 7.5} fill={col.fill} opacity="0.22" />
-                {/* Main colored dot */}
-                <circle
-                  cx={px} cy={py}
-                  r={isNew ? 7 : 5.5}
-                  fill={col.fill}
-                  opacity="0.97"
-                  stroke={col.stroke}
-                  strokeWidth={isNew ? 2 : 1.6}
-                />
-                {/* Inner bright center for clarity */}
-                <circle cx={px} cy={py} r={isNew ? 2.5 : 1.6} fill={col.stroke} opacity="0.85" />
-              </g>
-            );
-          })}
-
-          {/* Vessel icon — top-down ship silhouette */}
-          <g transform={`translate(${vessel.x}, ${vessel.y}) rotate(${vessel.heading})`}>
-            {/* Ambient engine glow */}
-            <ellipse cx="0" cy="0" rx="14" ry="20" fill="rgba(255,138,31,0.09)" />
-            {/* Wake at stern */}
-            <line x1="-5" y1="17" x2="-9" y2="26" stroke="rgba(64,224,208,0.35)" strokeWidth="1.2" strokeDasharray="2 3" />
-            <line x1="0"  y1="18" x2="0"  y2="27" stroke="rgba(64,224,208,0.2)"  strokeWidth="1"   strokeDasharray="2 3" />
-            <line x1="5"  y1="17" x2="9"  y2="26" stroke="rgba(64,224,208,0.35)" strokeWidth="1.2" strokeDasharray="2 3" />
-            {/* Hull — pointed bow (y-axis negative = forward) */}
-            <path
-              d="M 0,-18
-                 C 3,-15 6,-9 6,-1
-                 L 6,10
-                 C 5,13 3,16 0,17
-                 C -3,16 -5,13 -6,10
-                 L -6,-1
-                 C -6,-9 -3,-15 0,-18 Z"
-              fill="#FF8A1F"
-              stroke="#fff"
-              strokeWidth="1.4"
-              style={{ filter: "drop-shadow(0 0 6px rgba(255,138,31,0.65))" }}
-            />
-            {/* Deck centerline */}
-            <line x1="0" y1="-14" x2="0" y2="14" stroke="rgba(255,255,255,0.18)" strokeWidth="0.7" />
-            {/* Bow waterline mark */}
-            <line x1="-3.5" y1="-12" x2="3.5" y2="-12" stroke="rgba(255,255,255,0.45)" strokeWidth="0.9" />
-            {/* Bridge / superstructure */}
-            <rect x="-3.5" y="-4" width="7" height="10" rx="1.5"
-              fill="rgba(255,255,255,0.80)" />
-            {/* Mast center dot */}
-            <circle cx="0" cy="2" r="2.2" fill="#fff" opacity="0.96"
-              style={{ filter: "drop-shadow(0 0 4px #FF8A1F)" }} />
-            {/* Navigation lights — red port (left), green starboard (right) */}
-            <circle cx="-6" cy="-1" r="1.2" fill="#f87171" opacity="0.9" />
-            <circle cx=" 6" cy="-1" r="1.2" fill="#4ade80" opacity="0.9" />
-          </g>
-        </svg>
-
-        {/* SVG Layer 3: 살포 라벨 (필터 없음, 항상 최상위) */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-          style={{ pointerEvents: "none" }}
-        >
-          <defs>
-            <filter id="labelShadow" x="-10%" y="-20%" width="120%" height="140%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#000" floodOpacity="0.7"/>
-            </filter>
-          </defs>
-          {drops.map((d) => {
-            const px = MAP_W / 2 + (d.lng - BASE_LNG) / 0.00048;
-            const py = MAP_H / 2 - (d.lat - BASE_LAT) / 0.00055;
-            const isNew = highlightDropId !== undefined && d.id === highlightDropId;
-            const col  = dropVisualColors(d);
-            const lw   = d.label.length * 5.5 + 8; // 라벨 너비 계산
-            return (
-              <g key={`lbl-${d.id}`}>
-                {/* 라벨 배경 박스 */}
-                <rect
-                  x={px + 8} y={py - 8}
-                  width={lw} height={13}
-                  rx={3}
-                  fill="rgba(3,18,36,0.82)"
-                  stroke={col.fill}
-                  strokeWidth="0.8"
-                  filter="url(#labelShadow)"
-                />
-                {/* 라벨 텍스트 */}
-                <text
-                  x={px + 8 + lw / 2} y={py + 1.5}
-                  textAnchor="middle"
-                  fontSize={isNew ? "8.5" : "7.5"}
-                  fontFamily="monospace"
-                  fontWeight="700"
-                  fill={isNew ? col.stroke : "rgba(255,255,255,0.88)"}
-                >
-                  {d.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* ── Wave animation overlay at bottom ── */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none">
-          <svg
-            viewBox="0 0 1920 64"
-            preserveAspectRatio="none"
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: "200%",
-              height: "100%",
-              animation: "waveSlide 11s linear infinite",
-            }}
-          >
-            <path
-              d="M 0 42 C 160 22 320 62 480 42 C 640 22 800 62 960 42 C 1120 22 1280 62 1440 42 C 1600 22 1760 62 1920 42 L 1920 64 L 0 64 Z"
-              fill="rgba(64,224,208,0.09)"
-            />
-          </svg>
-          <svg
-            viewBox="0 0 1920 64"
-            preserveAspectRatio="none"
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: "200%",
-              height: "100%",
-              animation: "waveSlide 17s linear infinite reverse",
-              opacity: 0.55,
-            }}
-          >
-            <path
-              d="M 0 50 C 120 36 240 60 360 50 C 480 36 600 60 720 50 C 840 36 960 60 1080 50 C 1200 36 1320 60 1440 50 C 1560 36 1680 60 1800 50 C 1860 44 1920 56 1920 50 L 1920 64 L 0 64 Z"
-              fill="rgba(64,224,208,0.06)"
-            />
-          </svg>
-        </div>
-
-        {/* Corner coordinates */}
-        <div className="absolute top-3 left-3 text-xs text-cyan-400/60 font-mono pointer-events-none leading-snug">
-          북위 {(BASE_LAT + 0.14).toFixed(3)}° · 동경 {(BASE_LNG - 0.22).toFixed(3)}°
-        </div>
-        <div className="absolute top-3 right-3 text-xs text-cyan-400/60 font-mono text-right pointer-events-none leading-snug">
-          북위 {(BASE_LAT + 0.14).toFixed(3)}° · 동경 {(BASE_LNG + 0.22).toFixed(3)}°
-        </div>
-        <div className="absolute bottom-3 left-3 text-xs text-cyan-400/60 font-mono pointer-events-none leading-snug">
-          북위 {(BASE_LAT - 0.14).toFixed(3)}° · 동경 {(BASE_LNG - 0.22).toFixed(3)}°
-        </div>
-        <div className="absolute bottom-3 right-3 text-xs text-cyan-400/60 font-mono text-right pointer-events-none leading-snug">
-          북위 {(BASE_LAT - 0.14).toFixed(3)}° · 동경 {(BASE_LNG + 0.22).toFixed(3)}°
-        </div>
-
-        {/* Scale bar */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
-          <div className="flex items-center gap-0">
-            <div className="h-[3px] w-14 bg-white/50 border-l border-r border-white/80" />
-            <div className="h-[3px] w-14 bg-black/40 border-r border-white/80" />
-          </div>
-          <span className="text-xs text-white/55 font-mono">500 m</span>
-        </div>
-
-        {/* Banner */}
-        <div className="absolute inset-x-0 bottom-[72px] flex justify-center pointer-events-none">
-          <div className="bg-black/45 backdrop-blur-sm text-white/45 text-xs px-3 py-1.5 rounded-full border border-white/10">
-            연안 항해 시연 · 지도 API 연동 예정
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
@@ -902,6 +475,7 @@ export default function Dashboard() {
   });
   const [path, setPath] = useState<{ x: number; y: number }[]>([]);
   const [zoom, setZoom] = useState(0);
+  const [mapFitNonce, setMapFitNonce] = useState(1);
   const [clock, setClock] = useState(() => new Date());
   const [colorHelpOpen, setColorHelpOpen] = useState(false);
   const [connected, setConnected] = useState(true);
@@ -928,6 +502,32 @@ export default function Dashboard() {
   }, [drops, filterStart, filterEnd]);
 
   const latestId = drops[drops.length - 1]?.id;
+
+  const highlightDropId = filteredDrops.some((x) => x.id === latestId)
+    ? latestId
+    : undefined;
+
+  const pathLatLng = useMemo(
+    () =>
+      path.map((p) => {
+        const ll = xyToLatLng(p.x, p.y);
+        return [ll.lat, ll.lng] as [number, number];
+      }),
+    [path]
+  );
+
+  const leafletDrops = useMemo(
+    () =>
+      filteredDrops.map((d) => ({
+        id: d.id,
+        label: d.label,
+        lat: d.lat,
+        lng: d.lng,
+        highlight: highlightDropId === d.id,
+        ...dropVisualColors(d),
+      })),
+    [filteredDrops, highlightDropId]
+  );
 
   // Auto-scroll log
   useEffect(() => {
@@ -1026,7 +626,10 @@ export default function Dashboard() {
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
-  const handleRecenter = useCallback(() => setZoom(0), []);
+  const handleRecenter = useCallback(() => {
+    setZoom(0);
+    setMapFitNonce((n) => n + 1);
+  }, []);
 
   // Mouse wheel zoom
   useEffect(() => {
@@ -1409,15 +1012,22 @@ export default function Dashboard() {
           <WorkPlanView weather={weather} />
         ) : null}
 
-        <div ref={mapContainerRef} className={`flex-1 relative overflow-hidden ${viewMode === "schedule" ? "hidden" : ""}`}>
-          <MapPlaceholder
-            drops={filteredDrops}
-            vessel={vessel}
-            path={path}
-            zoom={zoom}
-            highlightDropId={filteredDrops.some((x) => x.id === latestId) ? latestId : undefined}
-            weather={weather}
-          />
+        <div
+          ref={mapContainerRef}
+          className={`flex-1 min-h-0 min-w-0 relative overflow-hidden ${viewMode === "schedule" ? "hidden" : ""}`}
+        >
+          <div className="absolute inset-0 z-0 min-h-0 min-w-0">
+            <MarineLeafletMap
+              basemap="voyager"
+              center={[BASE_LAT, BASE_LNG]}
+              zoomRail={zoom}
+              fitNonce={mapFitNonce}
+              drops={leafletDrops}
+              vessel={vessel}
+              pathLatLng={pathLatLng}
+              disableScrollWheelZoom
+            />
+          </div>
 
           {/* Clock overlay */}
           <div
@@ -1447,7 +1057,13 @@ export default function Dashboard() {
             <FloatBtn onClick={handleRecenter} title="화면 중심 이동">
               <Navigation className="w-5 h-5" />
             </FloatBtn>
-            <FloatBtn onClick={() => setZoom(0)} title="뷰 초기화">
+            <FloatBtn
+              onClick={() => {
+                setZoom(0);
+                setMapFitNonce((n) => n + 1);
+              }}
+              title="뷰 초기화"
+            >
               <RefreshCw className="w-5 h-5" />
             </FloatBtn>
           </div>
@@ -1456,7 +1072,7 @@ export default function Dashboard() {
           {zoom !== 0 && (
             <div className="absolute right-16 top-1/2 -translate-y-1/2 z-10">
               <div className="bg-black/55 text-cyan-300 text-xs font-mono px-2.5 py-1 rounded-full border border-white/10">
-                ×{(1 + zoom * 0.12).toFixed(2)}
+                +{zoom}단
               </div>
             </div>
           )}

@@ -4,12 +4,13 @@ import { DataPanel } from "./components/data-panel";
 import { SeagrassMap, type DropPoint } from "./components/seagrass-map";
 import { HistoryView } from "./components/history-view";
 import { LoginPage } from "./components/login-page";
+import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 import { Bell, HelpCircle, LogOut, User } from "lucide-react";
 
 type View = "dashboard" | "history";
 
-const BASE_LAT = 34.582;
-const BASE_LNG = 128.719;
+const BASE_LAT = OPS_AREA_CENTER.lat;
+const BASE_LNG = OPS_AREA_CENTER.lng;
 
 function formatTime(d: Date) {
   return d.toLocaleTimeString("en-GB", { hour12: false });
@@ -27,8 +28,16 @@ function seedInitialDrops(): DropPoint[] {
     return {
       id: String(1001 + i).padStart(4, "0"),
       time: formatTime(t),
-      lat: BASE_LAT + (p.y - 350) * 0.0005 + (Math.random() - 0.5) * 0.0002,
-      lng: BASE_LNG + (p.x - 500) * 0.0005 + (Math.random() - 0.5) * 0.0002,
+      lat:
+        BASE_LAT +
+        (p.y - 350) * 0.0005 +
+        SIM_SEA_OFFSET.lat +
+        (Math.random() - 0.5) * 0.0002,
+      lng:
+        BASE_LNG +
+        (p.x - 500) * 0.0005 +
+        SIM_SEA_OFFSET.lng +
+        (Math.random() - 0.5) * 0.0002,
       status: "Success",
       x: p.x,
       y: p.y,
@@ -99,8 +108,16 @@ export default function App() {
         const newDrop: DropPoint = {
           id,
           time: formatTime(new Date()),
-          lat: BASE_LAT + (v.y - 350) * 0.0005 + (Math.random() - 0.5) * 0.0002,
-          lng: BASE_LNG + (v.x - 500) * 0.0005 + (Math.random() - 0.5) * 0.0002,
+          lat:
+            BASE_LAT +
+            (v.y - 350) * 0.0005 +
+            SIM_SEA_OFFSET.lat +
+            (Math.random() - 0.5) * 0.0002,
+          lng:
+            BASE_LNG +
+            (v.x - 500) * 0.0005 +
+            SIM_SEA_OFFSET.lng +
+            (Math.random() - 0.5) * 0.0002,
           status: "Success",
           x: v.x,
           y: v.y,

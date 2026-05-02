@@ -49,7 +49,8 @@ function figmaAssetResolver() {
 
 export default defineConfig({
   server: {
-    host: '127.0.0.1',
+    /** true: 127.0.0.1 / localhost / LAN 모두에서 접속 (일부 환경에서 단일 바인딩 시 빈 화면·접속 실패 완화) */
+    host: true,
     port: 5199,
     strictPort: true,
     /** 내장 open은 Cursor 터미널에서 무시되는 경우가 많아 `openBrowserOnReady`에서 처리 */
