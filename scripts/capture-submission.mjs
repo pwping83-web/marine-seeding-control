@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const url = process.env.CAPTURE_URL || "http://127.0.0.1:5199/";
+const url = process.env.CAPTURE_URL || "http://192.168.45.214:5111/";
 const out = process.env.CAPTURE_OUT || "submission-dashboard.png";
 
 const browser = await chromium.launch();
