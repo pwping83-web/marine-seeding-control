@@ -4,6 +4,24 @@ import ManualModal, { ManualButton } from "./ManualModal";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
 import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+import {
+  fetchClientAccessGeo,
+  geoToAccessLocationLine,
+  formatAccessTimeKorea,
+} from "@/lib/fetch-client-access-geo";
+
+async function sendLoginSuccessAccessEmail(): Promise<void> {
+  if (!isEmailJsAccessNotifyConfigured()) return;
+  try {
+    const geo = await fetchClientAccessGeo();
+    await sendAccessNotifyEmail({
+      accessLocation: geoToAccessLocationLine(geo),
+      accessTime: formatAccessTimeKorea(),
+    });
+  } catch (e) {
+    console.warn("[emailjs] 로그인 접속 알림 실패", e);
+  }
+}
 
 // ─── Bubble data for background particles ─────────────────────────────────────
 const BUBBLES: { left: string; size: number; dur: number; delay: number; opacity: number }[] = [
@@ -56,71 +74,26 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   }, []);
 
   useEffect(() => {
-    const needDb = marineDbEnabled();
-    const needMail = isEmailJsAccessNotifyConfigured();
-    if (!needDb && !needMail) return;
+    if (!marineDbEnabled()) return;
 
     let cancelled = false;
     (async () => {
+      const geo = await fetchClientAccessGeo();
+      if (cancelled) return;
       try {
-        const ipRes = await fetch("https://api.ipify.org?format=json");
-        const ipJson = (await ipRes.json()) as { ip?: string };
-        const ip = ipJson.ip ?? null;
-        let country: string | null = null;
-        let region: string | null = null;
-        let city: string | null = null;
-        if (ip) {
-          try {
-            const geoRes = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
-            const g = (await geoRes.json()) as {
-              success?: boolean;
-              country?: string;
-              region?: string;
-              city?: string;
-            };
-            if (g.success) {
-              country = g.country ?? null;
-              region = g.region ?? null;
-              city = g.city ?? null;
-            }
-          } catch {
-            /* 위치 API 실패 시 IP만 기록 */
-          }
-        }
-
-        const placeParts = [city, region, country].filter(Boolean) as string[];
-        const accessLocation =
-          placeParts.length > 0 ? `${placeParts.join(", ")} (IP: ${ip ?? "—"})` : ip ?? "위치 미확인";
-        const accessTime = new Date().toLocaleString("ko-KR", {
-          timeZone: "Asia/Seoul",
-          dateStyle: "medium",
-          timeStyle: "medium",
+        await logSiteAccess({
+          ip: geo.ip,
+          country: geo.country,
+          region: geo.region,
+          city: geo.city,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          path:
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/",
         });
-
-        if (cancelled) return;
-
-        if (needDb) {
-          await logSiteAccess({
-            ip,
-            country,
-            region,
-            city,
-            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-            path:
-              typeof window !== "undefined"
-                ? `${window.location.pathname}${window.location.search}`
-                : "/",
-          });
-        }
-        if (needMail) {
-          try {
-            await sendAccessNotifyEmail({ accessLocation, accessTime });
-          } catch (e) {
-            console.warn("[emailjs] 접속 알림 실패", e);
-          }
-        }
       } catch {
-        /* ipify 실패 등 무시 */
+        /* DB 기록 실패는 조용히 무시 */
       }
     })();
     return () => {
@@ -142,6 +115,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           setError(signError.message);
           return;
         }
+        void sendLoginSuccessAccessEmail();
         onSuccess();
       } catch (err) {
         setError(err instanceof Error ? err.message : "연결에 실패했습니다.");
@@ -152,6 +126,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     }
     setTimeout(() => {
       setLoading(false);
+      void sendLoginSuccessAccessEmail();
       onSuccess();
     }, 1100);
   }
