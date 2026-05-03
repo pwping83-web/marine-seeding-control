@@ -15,7 +15,7 @@ async function sendLoginSuccessAccessEmail(): Promise<void> {
   try {
     const geo = await fetchClientAccessGeo();
     await sendAccessNotifyEmail({
-      accessLocation: geoToAccessLocationLine(geo),
+      accessLocation: geoToAccessLocationLine(geo, { forEmail: true }),
       accessTime: formatAccessTimeKorea(),
     });
   } catch (e) {

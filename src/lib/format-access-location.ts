@@ -33,6 +33,27 @@ const KR_REGION_EN_TO_KO: Record<string, string> = {
   "Jeju-do": "제주",
 };
 
+/** ipwho `region_code` 등 숫자 코드 → 한글 (행정안전부 시·도 코드 계열) */
+const KR_REGION_CODE_TO_KO: Record<string, string> = {
+  "11": "서울",
+  "26": "부산",
+  "27": "대구",
+  "28": "인천",
+  "29": "광주",
+  "30": "대전",
+  "31": "울산",
+  "36": "세종",
+  "41": "경기",
+  "42": "강원",
+  "43": "충북",
+  "44": "충남",
+  "45": "전북",
+  "46": "전남",
+  "47": "경북",
+  "48": "경남",
+  "50": "제주",
+};
+
 /** 영문 시·군·구·읍면 단위 (ipwho city 필드) */
 const KR_CITY_EN_TO_KO: Record<string, string> = {
   // 광역시 구 (일부)
@@ -110,7 +131,20 @@ function normalizeRegionKey(s: string): string {
 function regionToKo(region: string | null | undefined): string | null {
   if (!region) return null;
   const k = normalizeRegionKey(region);
+  if (/^\d+$/.test(k)) {
+    return KR_REGION_CODE_TO_KO[k] ?? null;
+  }
   return KR_REGION_EN_TO_KO[k] ?? KR_REGION_EN_TO_KO[k.replace(/ Province$/i, "")] ?? null;
+}
+
+function regionCodeToKo(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const c = code.trim();
+  return KR_REGION_CODE_TO_KO[c] ?? null;
+}
+
+function isKoreanPostalOnly(s: string): boolean {
+  return /^\d{5}$/.test(s.trim());
 }
 
 function cityToKo(city: string | null | undefined): string | null {
@@ -128,27 +162,37 @@ function isKorea(country: string | null | undefined, countryCode: string | null 
 
 /**
  * 접속 위치 한 줄 (한국은 "대구 수성구" 스타일, 그 외는 영문 지명 + IP)
+ * @param params.omitIp true면 메일 등 사람이 읽는 문구에서 IP 괄호 제거
  */
 export function formatAccessLocationForDisplay(params: {
   country?: string | null;
   countryCode?: string | null;
   region?: string | null;
+  /** ipwho.is `region_code` (예: "41" 경기) */
+  region_code?: string | null;
   city?: string | null;
   ip?: string | null;
+  omitIp?: boolean;
 }): string {
-  const { country, countryCode, region, city, ip } = params;
-  const ipPart = ip ? `(IP: ${ip})` : "";
+  const { country, countryCode, region, region_code, city, ip, omitIp } = params;
+  const ipPart = !omitIp && ip ? `(IP: ${ip})` : "";
 
   if (isKorea(country, countryCode)) {
     const enR = region?.trim() ?? "";
-    const enC = city?.trim() ?? "";
+    const rawCity = city?.trim() ?? "";
+    /** 우편번호·숫자만 오는 city(오분류)는 지명으로 쓰지 않음 */
+    const enC =
+      !rawCity || isKoreanPostalOnly(rawCity) || /^\d+$/.test(rawCity) ? "" : rawCity;
+
     if (enR && enC && enR.toLowerCase() === enC.toLowerCase()) {
-      const one = regionToKo(region) ?? cityToKo(city) ?? enR;
+      const one =
+        regionToKo(region) ?? regionCodeToKo(region_code) ?? cityToKo(city) ?? enR;
       return ipPart ? `${one} ${ipPart}`.trim() : one;
     }
 
-    const koR = regionToKo(region) ?? (region?.trim() || "");
-    const koC = cityToKo(city) ?? (city?.trim() || "");
+    const koR =
+      (regionToKo(region) ?? regionCodeToKo(region_code) ?? (enR && !/^\d+$/.test(enR) ? enR : "")) || "";
+    const koC = cityToKo(city) ?? (enC || "");
 
     if (koR && koC && koR === koC) {
       return ipPart ? `${koR} ${ipPart}`.trim() : koR;

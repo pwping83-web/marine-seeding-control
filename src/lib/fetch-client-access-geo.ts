@@ -5,6 +5,8 @@ export type ClientAccessGeo = {
   country: string | null;
   countryCode: string | null;
   region: string | null;
+  /** ipwho.is 행정구역 코드 (예: 41=경기) */
+  region_code: string | null;
   city: string | null;
 };
 
@@ -14,6 +16,7 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
   let country: string | null = null;
   let countryCode: string | null = null;
   let region: string | null = null;
+  let region_code: string | null = null;
   let city: string | null = null;
 
   try {
@@ -28,12 +31,17 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
           country?: string;
           country_code?: string;
           region?: string;
+          region_code?: string | number;
           city?: string;
         };
         if (g.success) {
           country = g.country ?? null;
           countryCode = g.country_code ?? null;
           region = g.region ?? null;
+          region_code =
+            g.region_code !== undefined && g.region_code !== null
+              ? String(g.region_code)
+              : null;
           city = g.city ?? null;
         }
       } catch {
@@ -44,7 +52,7 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
     /* ipify 실패 */
   }
 
-  return { ip, country, countryCode, region, city };
+  return { ip, country, countryCode, region, region_code, city };
 }
 
 export function formatAccessTimeKorea(): string {
@@ -55,12 +63,17 @@ export function formatAccessTimeKorea(): string {
   });
 }
 
-export function geoToAccessLocationLine(geo: ClientAccessGeo): string {
+export function geoToAccessLocationLine(
+  geo: ClientAccessGeo,
+  opts?: { forEmail?: boolean },
+): string {
   return formatAccessLocationForDisplay({
     country: geo.country,
     countryCode: geo.countryCode,
     region: geo.region,
+    region_code: geo.region_code,
     city: geo.city,
     ip: geo.ip ?? undefined,
+    omitIp: opts?.forEmail === true,
   });
 }
