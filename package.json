@@ -10,7 +10,8 @@
     "auth:create-test-user": "node scripts/create-test-user.mjs",
     "capture:submission": "node scripts/capture-submission.mjs",
     "release": "node scripts/release.mjs",
-    "ship": "node scripts/release.mjs"
+    "ship": "node scripts/release.mjs",
+    "git:autosync": "node scripts/git-autosync.mjs"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
