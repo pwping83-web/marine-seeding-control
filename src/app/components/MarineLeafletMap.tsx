@@ -149,7 +149,7 @@ function VesselMarker({
     () =>
       L.divIcon({
         className: "marine-vessel-divicon",
-        html: `<div class="marine-vessel-pin" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-hull"></div></div>`,
+        html: `<div class="marine-vessel-pin" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-vessel-hull"></div></div>`,
         iconSize: [32, 40],
         iconAnchor: [16, 20],
       }),
