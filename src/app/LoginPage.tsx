@@ -1,6 +1,9 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Lock, Mail, ShieldCheck, AlertCircle } from "lucide-react";
 import ManualModal, { ManualButton } from "./ManualModal";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
+import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
 
 // ─── Bubble data for background particles ─────────────────────────────────────
 const BUBBLES: { left: string; size: number; dur: number; delay: number; opacity: number }[] = [
@@ -34,7 +37,7 @@ const RINGS = [
 type LoginPageProps = { onSuccess: () => void };
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
-  const [email, setEmail]       = useState("");
+  const [email, setEmail]       = useState("123456@gmail.com");
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
@@ -52,10 +55,101 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     return () => clearInterval(iv);
   }, []);
 
-  function handleSubmit(e: FormEvent) {
+  useEffect(() => {
+    const needDb = marineDbEnabled();
+    const needMail = isEmailJsAccessNotifyConfigured();
+    if (!needDb && !needMail) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const ipJson = (await ipRes.json()) as { ip?: string };
+        const ip = ipJson.ip ?? null;
+        let country: string | null = null;
+        let region: string | null = null;
+        let city: string | null = null;
+        if (ip) {
+          try {
+            const geoRes = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
+            const g = (await geoRes.json()) as {
+              success?: boolean;
+              country?: string;
+              region?: string;
+              city?: string;
+            };
+            if (g.success) {
+              country = g.country ?? null;
+              region = g.region ?? null;
+              city = g.city ?? null;
+            }
+          } catch {
+            /* 위치 API 실패 시 IP만 기록 */
+          }
+        }
+
+        const placeParts = [city, region, country].filter(Boolean) as string[];
+        const accessLocation =
+          placeParts.length > 0 ? `${placeParts.join(", ")} (IP: ${ip ?? "—"})` : ip ?? "위치 미확인";
+        const accessTime = new Date().toLocaleString("ko-KR", {
+          timeZone: "Asia/Seoul",
+          dateStyle: "medium",
+          timeStyle: "medium",
+        });
+
+        if (cancelled) return;
+
+        if (needDb) {
+          await logSiteAccess({
+            ip,
+            country,
+            region,
+            city,
+            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+            path:
+              typeof window !== "undefined"
+                ? `${window.location.pathname}${window.location.search}`
+                : "/",
+          });
+        }
+        if (needMail) {
+          try {
+            await sendAccessNotifyEmail({ accessLocation, accessTime });
+          } catch (e) {
+            console.warn("[emailjs] 접속 알림 실패", e);
+          }
+        }
+      } catch {
+        /* ipify 실패 등 무시 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
+    if (isSupabaseConfigured()) {
+      try {
+        const { error: signError } = await getSupabase().auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signError) {
+          setError(signError.message);
+          return;
+        }
+        onSuccess();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "연결에 실패했습니다.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     setTimeout(() => {
       setLoading(false);
       onSuccess();
@@ -248,18 +342,19 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
       {/* Manual modal */}
       <ManualModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
 
-      {/* M button — top-right corner */}
-      <div className="absolute top-4 right-5 z-20">
-        <ManualButton onClick={() => setManualOpen(true)} />
-      </div>
-
       {/* ── Corner metadata labels ───────────────────────────────────────── */}
       <div className="absolute top-4 left-5 text-xs font-mono text-cyan-400/35 pointer-events-none" style={{ zIndex: 2 }}>
         34.582°N · 128.719°E
       </div>
-      <div className="absolute top-4 right-5 text-xs font-mono text-cyan-400/35 pointer-events-none text-right" style={{ zIndex: 2 }}>
-        <span className="mr-3">{clock.toLocaleTimeString("ko-KR", { hour12: false })}</span>
-        KST
+      {/* 우상단: 시각 위 · M 버튼 아래 (겹침 방지) */}
+      <div className="absolute top-4 right-5 z-20 flex flex-col items-end gap-2">
+        <div className="text-xs font-mono text-cyan-400/35 text-right pointer-events-none">
+          <span>{clock.toLocaleTimeString("ko-KR", { hour12: false })}</span>
+          <span className="ml-2">KST</span>
+        </div>
+        <div className="pointer-events-auto">
+          <ManualButton onClick={() => setManualOpen(true)} />
+        </div>
       </div>
       <div className="absolute bottom-4 left-5 text-[10px] font-mono text-white/20 pointer-events-none" style={{ zIndex: 2 }}>
         해양수산부 · 해양 종자 살포 관제체계

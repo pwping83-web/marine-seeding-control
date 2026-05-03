@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>접속 알림</title>
+</head>
+<body style="margin:0;padding:24px;background:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0 auto;background:#1e293b;border-radius:12px;overflow:hidden;border:1px solid #334155;">
+    <tr>
+      <td style="padding:20px 24px;background:linear-gradient(135deg,#0d9488,#0e7490);color:#fff;font-size:15px;font-weight:600;">
+        {{service_name}} · 접속 알림
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px;color:#e2e8f0;font-size:14px;line-height:1.6;">
+        <p style="margin:0 0 16px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;">접속 지역</p>
+        <p style="margin:0 0 24px;font-size:16px;color:#f1f5f9;">{{access_location}}</p>
+
+        <p style="margin:0 0 16px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;">날짜 · 시간 (KST)</p>
+        <p style="margin:0;font-size:16px;color:#f1f5f9;">{{access_time}}</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 24px 20px;font-size:11px;color:#64748b;border-top:1px solid #334155;">
+        자동 발송 · 해양 종자 살포 관제
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

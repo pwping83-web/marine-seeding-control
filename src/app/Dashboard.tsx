@@ -25,6 +25,13 @@ import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
 import { MarineLeafletMap } from "./components/MarineLeafletMap";
 import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
+import {
+  fetchSeedDropRecords,
+  insertShipCommand,
+  marineDbEnabled,
+  seedSeedDropRecords,
+  upsertSeedDropRecord,
+} from "@/lib/marine-db";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -136,6 +143,18 @@ function getZone(x: number): "A" | "B" | "C" {
 
 function makeLabel(zone: "A" | "B" | "C", n: number): string {
   return `${zone}${String(n).padStart(2, "0")}`;
+}
+
+function rebuildZoneCountsFromDrops(drops: SeedDrop[]): Record<"A" | "B" | "C", number> {
+  const c: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
+  for (const d of drops) {
+    const m = /^([ABC])(\d+)$/.exec(d.label);
+    if (!m) continue;
+    const z = m[1] as "A" | "B" | "C";
+    const n = parseInt(m[2], 10);
+    if (n > c[z]) c[z] = n;
+  }
+  return c;
 }
 
 function startOfDayMs(ymd: string): number {
@@ -465,7 +484,9 @@ function SignalPanel({
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [drops, setDrops] = useState<SeedDrop[]>(seedInitial);
+  const [drops, setDrops] = useState<SeedDrop[]>(() =>
+    marineDbEnabled() ? [] : seedInitial(),
+  );
   const [filterStart, setFilterStart] = useState("");
   const [filterEnd, setFilterEnd] = useState("");
   const [vessel, setVessel] = useState<Vessel>(() => {
@@ -489,6 +510,7 @@ export default function Dashboard() {
   const wpIdx        = useRef(0);
   const counter      = useRef(1000 + INITIAL_SEED_COUNT + 1);
   const zoneCounts   = useRef<Record<"A"|"B"|"C", number>>({ ...INIT_ZONE_COUNTS });
+  const dropsDbReady = useRef(!marineDbEnabled());
   const logRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wheelZoomAccum = useRef(0);
@@ -528,6 +550,67 @@ export default function Dashboard() {
       })),
     [filteredDrops, highlightDropId]
   );
+
+  useEffect(() => {
+    if (!marineDbEnabled()) {
+      dropsDbReady.current = true;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const fromDb = await fetchSeedDropRecords(80);
+      if (cancelled) return;
+      if (fromDb === null) {
+        const seed = seedInitial();
+        if (!cancelled) {
+          setDrops(seed);
+          zoneCounts.current = rebuildZoneCountsFromDrops(seed);
+          const maxNum = seed.reduce((m, d) => Math.max(m, parseInt(d.id, 10) || 0), 0);
+          counter.current = Math.max(maxNum + 1, 1006);
+        }
+        dropsDbReady.current = true;
+        return;
+      }
+      if (fromDb.length > 0) {
+        const mapped: SeedDrop[] = fromDb.map((r) => ({
+          id: r.id,
+          label: r.label,
+          time: r.time,
+          lat: r.lat,
+          lng: r.lng,
+          status: r.status,
+          recordedAt: r.recordedAt,
+          verificationMismatch: r.verificationMismatch,
+        }));
+        if (!cancelled) {
+          setDrops(mapped);
+          const maxNum = mapped.reduce((m, d) => Math.max(m, parseInt(d.id, 10) || 0), 0);
+          counter.current = Math.max(maxNum + 1, 1006);
+          zoneCounts.current = rebuildZoneCountsFromDrops(mapped);
+        }
+      } else {
+        const seed = seedInitial();
+        if (!cancelled) setDrops(seed);
+        await seedSeedDropRecords(
+          seed.map((s) => ({
+            id: s.id,
+            label: s.label,
+            time: s.time,
+            lat: s.lat,
+            lng: s.lng,
+            status: s.status,
+            recordedAt: s.recordedAt,
+            verificationMismatch: s.verificationMismatch,
+          })),
+        );
+        if (!cancelled) zoneCounts.current = rebuildZoneCountsFromDrops(seed);
+      }
+      dropsDbReady.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Auto-scroll log
   useEffect(() => {
@@ -576,7 +659,22 @@ export default function Dashboard() {
           status: "성공",
           recordedAt,
         };
-        setDrops((d) => [...d, newDrop].slice(-80));
+        setDrops((d) => {
+          const next = [...d, newDrop].slice(-80);
+          if (marineDbEnabled() && dropsDbReady.current) {
+            void upsertSeedDropRecord({
+              id: newDrop.id,
+              label: newDrop.label,
+              time: newDrop.time,
+              lat: newDrop.lat,
+              lng: newDrop.lng,
+              status: newDrop.status,
+              recordedAt: newDrop.recordedAt,
+              verificationMismatch: newDrop.verificationMismatch,
+            });
+          }
+          return next;
+        });
         return v;
       });
     }, 16_000);
@@ -613,6 +711,7 @@ export default function Dashboard() {
       if (signalSending) return;
       const id = Date.now().toString();
       const newSig: SignalEntry = { id, cmd, time: fmt(new Date()), ack: false };
+      if (marineDbEnabled()) void insertShipCommand(cmd, newSig.time);
       setSignals((s) => [...s.slice(-9), newSig]);
       setSignalSending(true);
       const delay = 2200 + Math.random() * 1400;

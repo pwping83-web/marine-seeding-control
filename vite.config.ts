@@ -11,7 +11,7 @@ const DEV_PORT = 5111
  * 다른 PC에서 테스트할 때는 `VITE_OPEN_URL`로 덮어쓰거나 이 상수를 본인 LAN IP에 맞게 수정.
  */
 const DEV_PUBLIC_ORIGIN =
-  (process.env.VITE_OPEN_URL?.replace(/\/$/, '') || 'http://192.168.45.214:5111') + '/'
+  (process.env.VITE_OPEN_URL?.replace(/\/$/, '') || 'http://localhost:5111') + '/'
 
 /**
  * Vite 기본 `server.open`은 Cursor 통합 터미널·일부 환경에서 동작하지 않는 경우가 있어,

@@ -1,9 +1,17 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import {
   AlertCircle, CheckCircle2, XCircle, Wind, Eye, Droplets,
   Thermometer, ChevronDown, ChevronUp, MapPin, Ship, Clock,
   Plus, X, CalendarPlus,
 } from "lucide-react";
+import type { WorkEntry } from "./work-plan-types";
+import {
+  fetchWorkReservations,
+  insertWorkReservation,
+  marineDbEnabled,
+  replaceWeatherForecastDays,
+  seedWorkReservations,
+} from "@/lib/marine-db";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,17 +36,6 @@ interface ForecastDay {
   temp: number;
   status: "ok" | "caution" | "impossible";
   reasons: string[];
-}
-
-interface WorkEntry {
-  id: string;
-  date: string;
-  zone: string;
-  targetSeeds: number;
-  vessel: string;
-  status: "scheduled" | "completed" | "weather-hold" | "cancelled";
-  actual?: number;
-  note?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -78,7 +75,7 @@ function AddReservationModal({
   forecastMap,
 }: {
   onClose: () => void;
-  onAdd: (entry: WorkEntry) => void;
+  onAdd: (entry: WorkEntry) => void | Promise<void>;
   forecastMap: Map<string, "ok" | "caution" | "impossible">;
 }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -326,13 +323,68 @@ const WORK_CFG = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function WorkPlanView({ weather }: { weather: WeatherState }) {
-  const [schedule,      setSchedule]      = useState<WorkEntry[]>(INITIAL_SCHEDULE);
+  const [schedule, setSchedule] = useState<WorkEntry[]>(() =>
+    marineDbEnabled() ? [] : INITIAL_SCHEDULE,
+  );
+  const [scheduleReady, setScheduleReady] = useState(!marineDbEnabled());
   const [selectedDay,   setSelectedDay]   = useState<number | null>(0);
   const [expandedWork,  setExpandedWork]  = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showAddModal,  setShowAddModal]  = useState(false);
 
+  useEffect(() => {
+    if (!marineDbEnabled()) {
+      setScheduleReady(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      let rows = await fetchWorkReservations();
+      if (cancelled) return;
+      if (rows === null) {
+        if (!cancelled) setSchedule(INITIAL_SCHEDULE);
+        setScheduleReady(true);
+        return;
+      }
+      if (rows.length === 0) {
+        await seedWorkReservations(INITIAL_SCHEDULE);
+        rows = await fetchWorkReservations();
+      }
+      if (!cancelled) {
+        if (rows && rows.length > 0) setSchedule(rows);
+        else setSchedule(INITIAL_SCHEDULE);
+      }
+      setScheduleReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const forecast = useMemo(() => buildForecast(weather), [weather.windSpeed]);
+
+  useEffect(() => {
+    if (!marineDbEnabled() || !scheduleReady || forecast.length === 0) return;
+    const anchor = `${forecast[0].date.getFullYear()}-${String(forecast[0].date.getMonth() + 1).padStart(2, "0")}-${String(forecast[0].date.getDate()).padStart(2, "0")}`;
+    const t = window.setTimeout(() => {
+      void replaceWeatherForecastDays(
+        anchor,
+        forecast.map((f) => ({
+          date: f.date,
+          windSpeed: f.windSpeed,
+          windDir: f.windDir,
+          windGust: f.windGust,
+          waveHeight: f.waveHeight,
+          visibility: f.visibility,
+          precipitation: f.precipitation,
+          temp: f.temp,
+          status: f.status,
+          reasons: f.reasons,
+        })),
+      );
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [forecast, scheduleReady]);
 
   const now     = new Date();
   const year    = now.getFullYear();
@@ -367,7 +419,8 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
     return m;
   }, [forecast]);
 
-  function handleAddEntry(entry: WorkEntry) {
+  async function handleAddEntry(entry: WorkEntry) {
+    if (marineDbEnabled()) await insertWorkReservation(entry);
     setSchedule((prev) => [...prev, entry].sort((a, b) => a.date.localeCompare(b.date)));
   }
 
@@ -401,6 +454,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         scrollbarColor: "#1e3a5f transparent",
       }}
     >
+      {marineDbEnabled() && !scheduleReady && (
+        <p className="text-center text-xs text-cyan-200/80 py-2">DB에서 작업 일정을 불러오는 중…</p>
+      )}
       {/* 예약 추가 모달 */}
       {showAddModal && (
         <AddReservationModal
