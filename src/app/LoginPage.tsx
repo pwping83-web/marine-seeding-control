@@ -9,12 +9,6 @@ import {
   geoToAccessLocationLine,
   formatAccessTimeKorea,
 } from "@/lib/fetch-client-access-geo";
-import {
-  isSiteAccessCredentials,
-  SITE_ACCESS_EMAIL,
-  SITE_ACCESS_PASSWORD,
-} from "@/lib/site-access";
-
 async function sendLoginSuccessAccessEmail(): Promise<void> {
   if (!isEmailJsAccessNotifyConfigured()) return;
   try {
@@ -60,8 +54,8 @@ const RINGS = [
 type LoginPageProps = { onSuccess: () => void };
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
-  const [email, setEmail] = useState(SITE_ACCESS_EMAIL);
-  const [password, setPassword] = useState(SITE_ACCESS_PASSWORD);
+  const [email, setEmail] = useState("marine@gmail.com");
+  const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   const [mounted, setMounted]   = useState(false);
@@ -131,10 +125,6 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     }
     setTimeout(() => {
       setLoading(false);
-      if (!isSiteAccessCredentials(email, password)) {
-        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
-        return;
-      }
       void sendLoginSuccessAccessEmail();
       onSuccess();
     }, 600);
@@ -509,7 +499,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={SITE_ACCESS_EMAIL}
+                    placeholder="예: marine@gmail.com"
                     className="w-full rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none transition-all duration-200"
                     style={{
                       background: "rgba(255,255,255,0.05)",
@@ -625,7 +615,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                 className="text-center leading-relaxed"
                 style={{ color: "rgba(255,255,255,0.28)", fontSize: 11 }}
               >
-                Supabase 미연동 시: 위 이메일·비밀번호로만 접속됩니다.
+                Supabase 미연동 시: 이메일·비밀번호 없이도 접속 버튼만으로 대시보드로 이동합니다.
               </p>
 
               {/* System status row */}
