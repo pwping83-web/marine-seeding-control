@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** 공식 배포 URL(선택). 미설정 시 site-url.ts 기본값 사용 */
+  readonly VITE_SITE_URL?: string;
   readonly VITE_SUPABASE_URL: string;
   readonly VITE_SUPABASE_ANON_KEY: string;
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import {
   Activity,
   AlertCircle,
@@ -16,10 +24,9 @@ import {
   Ship,
   Thermometer,
   Wind,
-  Wifi,
-  WifiOff,
   ZoomIn,
   ZoomOut,
+  Upload,
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
@@ -32,6 +39,7 @@ import {
   seedSeedDropRecords,
   upsertSeedDropRecord,
 } from "@/lib/marine-db";
+import { LOCAL_RECORDING_ONLY } from "@/lib/local-recording-mode";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +86,95 @@ const BASE_LNG = OPS_AREA_CENTER.lng;
 const MAP_W = 940;
 const MAP_H = 520;
 const VESSEL_NAME = "제3해양살포함";
+
+/** 로컬 전용: 브라우저 저장소 (인터넷·DB 없음) */
+const DROP_STORAGE_KEY = "marine-seed-drops-v1";
+
+function loadDropsFromLocalStorage(): SeedDrop[] | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DROP_STORAGE_KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return null;
+    const out: SeedDrop[] = [];
+    for (const row of arr) {
+      if (!row || typeof row !== "object") continue;
+      const o = row as Record<string, unknown>;
+      if (typeof o.id !== "string" || typeof o.lat !== "number" || typeof o.lng !== "number") continue;
+      const st = o.status === "실패" || o.status === "대기" ? o.status : "성공";
+      out.push({
+        id: o.id,
+        label: typeof o.label === "string" ? o.label : o.id,
+        time: typeof o.time === "string" ? o.time : "",
+        lat: o.lat,
+        lng: o.lng,
+        status: st,
+        recordedAt: typeof o.recordedAt === "number" ? o.recordedAt : Date.now(),
+        verificationMismatch: Boolean(o.verificationMismatch),
+      });
+    }
+    return out.length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**보낸 CSV 검증·복구용 (간단 파서) */
+function parseCsvToDrops(csv: string): SeedDrop[] {
+  const lines = csv
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split(/\r?\n/)
+    .filter((l) => l.length > 0);
+  if (lines.length < 2) return [];
+  const out: SeedDrop[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(",");
+    if (parts.length < 5) continue;
+    const id = parts[0]?.trim();
+    if (!id) continue;
+    if (parts.length >= 8) {
+      const label = (parts[1] ?? id).trim();
+      const time = (parts[2] ?? "").trim();
+      const lat = parseFloat(parts[3] ?? "");
+      const lng = parseFloat(parts[4] ?? "");
+      const status =
+        parts[5]?.trim() === "실패" || parts[5]?.trim() === "대기" ? (parts[5].trim() as SeedDrop["status"]) : "성공";
+      const recordedAt = parseInt(parts[7] ?? "", 10) || Date.now();
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      out.push({
+        id,
+        label,
+        time,
+        lat,
+        lng,
+        status,
+        recordedAt,
+        verificationMismatch: false,
+      });
+    } else {
+      const time = (parts[1] ?? "").trim();
+      const lat = parseFloat(parts[2] ?? "");
+      const lng = parseFloat(parts[3] ?? "");
+      const status =
+        parts[4]?.trim() === "실패" || parts[4]?.trim() === "대기" ? (parts[4].trim() as SeedDrop["status"]) : "성공";
+      const recordedAt = Date.now();
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      out.push({
+        id,
+        label: id,
+        time,
+        lat,
+        lng,
+        status,
+        recordedAt,
+        verificationMismatch: false,
+      });
+    }
+  }
+  return out;
+}
 
 /** 화면 좌표 루프 — 지도 중심(470,260) 부근에 몰아 남해 시연 구역만 최대 확대되게 함 */
 const WAYPOINTS = [
@@ -259,8 +356,14 @@ function seedInitial(): SeedDrop[] {
 }
 
 function exportCSV(drops: SeedDrop[]) {
-  const header = "식별번호,시각,위도,경도,상태\n";
-  const rows = drops.map((d) => `${d.id},${d.time},${d.lat},${d.lng},${d.status}`).join("\n");
+  const header =
+    "식별번호,구역,시각,위도,경도,상태,기록시각_ISO,recorded_at_ms\n";
+  const rows = drops
+    .map(
+      (d) =>
+        `${d.id},${d.label},${d.time},${d.lat},${d.lng},${d.status},${new Date(d.recordedAt).toISOString()},${d.recordedAt}`,
+    )
+    .join("\n");
   const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -484,9 +587,12 @@ function SignalPanel({
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [drops, setDrops] = useState<SeedDrop[]>(() =>
-    marineDbEnabled() ? [] : seedInitial(),
-  );
+  const [drops, setDrops] = useState<SeedDrop[]>(() => {
+    if (marineDbEnabled()) return [];
+    const stored = loadDropsFromLocalStorage();
+    if (stored && stored.length > 0) return stored;
+    return seedInitial();
+  });
   const [filterStart, setFilterStart] = useState("");
   const [filterEnd, setFilterEnd] = useState("");
   const [vessel, setVessel] = useState<Vessel>(() => {
@@ -499,7 +605,7 @@ export default function Dashboard() {
   const [mapFitNonce, setMapFitNonce] = useState(1);
   const [clock, setClock] = useState(() => new Date());
   const [colorHelpOpen, setColorHelpOpen] = useState(false);
-  const [connected, setConnected] = useState(true);
+  const fileImportRef = useRef<HTMLInputElement>(null);
   const [totalToday] = useState(124);
   const [weather, setWeather] = useState<WeatherState>(initWeather);
   const [signals, setSignals] = useState<SignalEntry[]>([]);
@@ -617,6 +723,25 @@ export default function Dashboard() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [filteredDrops]);
 
+  useLayoutEffect(() => {
+    if (marineDbEnabled()) return;
+    zoneCounts.current = rebuildZoneCountsFromDrops(drops);
+    const maxNum = drops.reduce((m, d) => Math.max(m, parseInt(d.id, 10) || 0), 0);
+    counter.current = Math.max(maxNum + 1, 1006);
+  }, [drops]);
+
+  useEffect(() => {
+    if (marineDbEnabled()) return;
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(DROP_STORAGE_KEY, JSON.stringify(drops.slice(-500)));
+      } catch (e) {
+        console.warn("[marine-drops] localStorage 저장 실패", e);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [drops]);
+
   // Vessel movement
   useEffect(() => {
     const iv = setInterval(() => {
@@ -681,15 +806,6 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, []);
 
-  // Connection blink
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setConnected(false);
-      setTimeout(() => setConnected(true), 300);
-    }, 8000);
-    return () => clearInterval(iv);
-  }, []);
-
   // Weather simulation
   useEffect(() => {
     const iv = setInterval(() => {
@@ -722,6 +838,30 @@ export default function Dashboard() {
     },
     [signalSending]
   );
+
+  const handleImportCsv = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const parsed = parseCsvToDrops(text);
+      if (parsed.length === 0) {
+        window.alert("인식된 행이 없습니다. CSV 형식(헤더 포함)을 확인하세요.");
+        return;
+      }
+      if (
+        !window.confirm(
+          `CSV ${parsed.length}건으로 이력을 덮어씁니다. 계속할까요?`,
+        )
+      ) {
+        return;
+      }
+      setDrops(parsed);
+    };
+    reader.readAsText(f, "UTF-8");
+  }, []);
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
@@ -789,7 +929,7 @@ export default function Dashboard() {
                 해양 종자 살포 관제
               </p>
               <p className="text-cyan-400/75 text-xs tracking-wide mt-0.5">
-                {VESSEL_NAME} · 해조류 복원 v2.1
+                {VESSEL_NAME} · GNSS 살포 기록(로컬·무인증)
               </p>
             </div>
           </div>
@@ -903,12 +1043,9 @@ export default function Dashboard() {
         <div className="px-4 py-2.5 border-b border-white/10 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-white/50 text-xs font-semibold tracking-wide">선박 위치</span>
-            <span className="flex items-center gap-1 text-xs">
-              {connected ? (
-                <><Wifi className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 text-[11px]">실시간</span></>
-              ) : (
-                <><WifiOff className="w-3.5 h-3.5 text-red-400" /><span className="text-red-400 text-[11px]">연결 확인</span></>
-              )}
+            <span className="flex items-center gap-1 text-xs text-emerald-400">
+              <Navigation className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[11px] font-medium">GNSS·로컬 기록</span>
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
@@ -1006,7 +1143,15 @@ export default function Dashboard() {
 
         {/* Date filter + export — compact single row */}
         <div className="px-3 py-2.5 border-t border-white/10 shrink-0">
-          <div className="flex gap-1.5 items-center">
+          <input
+            ref={fileImportRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleImportCsv}
+            aria-hidden
+          />
+          <div className="flex gap-1.5 items-center flex-wrap">
             <input
               type="date"
               value={filterStart}
@@ -1023,6 +1168,16 @@ export default function Dashboard() {
               aria-label="종료일"
             />
             <button
+              type="button"
+              onClick={() => fileImportRef.current?.click()}
+              title="CSV 파일에서 이력 불러오기(검증)"
+              className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-semibold text-white/90 border border-white/20 bg-white/5 hover:bg-white/10"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              불러오기
+            </button>
+            <button
+              type="button"
               onClick={() => exportCSV(filteredDrops)}
               title={`CSV 저장 (${filteredDrops.length}건)`}
               className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold text-white transition-all hover:scale-[1.04] active:scale-95"
@@ -1059,7 +1214,7 @@ export default function Dashboard() {
               style={{ background: "#40E0D0", boxShadow: "0 0 8px #40E0D0" }}
             />
             <span className="text-white/65 text-sm tracking-wide font-medium truncate">
-              실시간 관제 · 남해 제3구역
+              살포 구역 기록 · 남해 제3구역{LOCAL_RECORDING_ONLY ? " · 오프라인" : ""}
             </span>
           </div>
 
@@ -1125,6 +1280,7 @@ export default function Dashboard() {
               vessel={vessel}
               pathLatLng={pathLatLng}
               disableScrollWheelZoom
+              offlineNoTiles={LOCAL_RECORDING_ONLY}
             />
           </div>
 

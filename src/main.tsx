@@ -1,16 +1,37 @@
-import { Component, type ErrorInfo, type ReactNode, useState } from "react";
+import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Dashboard from "./app/Dashboard.tsx";
 import LoginPage from "./app/LoginPage.tsx";
+import {
+  SITE_DEPRECATED_PREVIEW_HOST,
+  SITE_PRODUCTION_ORIGIN,
+} from "@/lib/site-url";
 import "./styles/index.css";
 import "leaflet/dist/leaflet.css";
 
+/** 예전 미리보기 호스트로 들어온 경우 메인 프로덕션 URL로 이동 */
+function DeprecatedHostRedirect() {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hostname !== SITE_DEPRECATED_PREVIEW_HOST) return;
+    const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(`${SITE_PRODUCTION_ORIGIN}${path === "/" ? "" : path}`);
+  }, []);
+  return null;
+}
+
 function Root() {
   const [authed, setAuthed] = useState(false);
-  if (!authed) {
-    return <LoginPage onSuccess={() => setAuthed(true)} />;
-  }
-  return <Dashboard />;
+  return (
+    <>
+      <DeprecatedHostRedirect />
+      {!authed ? (
+        <LoginPage onSuccess={() => setAuthed(true)} />
+      ) : (
+        <Dashboard />
+      )}
+    </>
+  );
 }
 
 class RootErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {

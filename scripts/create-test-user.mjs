@@ -42,8 +42,8 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
-const email = process.env.TEST_AUTH_EMAIL?.trim() || "123456@gmail.com";
-const password = process.env.TEST_AUTH_PASSWORD?.trim() || "123456";
+const email = process.env.TEST_AUTH_EMAIL?.trim() || "marine@gmail.com";
+const password = process.env.TEST_AUTH_PASSWORD?.trim() || "1322aa";
 
 const admin = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },

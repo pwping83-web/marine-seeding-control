@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "marine-seeding-control-brcqjevvx-pwping83-webs-projects.vercel.app"
+        }
+      ],
+      "destination": "https://marine-seeding-control-git-main-pwping83-webs-projects.vercel.app/$1",
+      "permanent": true
+    }
+  ]
+}

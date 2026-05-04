@@ -3,10 +3,11 @@ import { Waves, Mail, Lock, Eye, EyeOff, ShieldCheck, Loader2 } from "lucide-rea
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { BusinessInfoFooter } from "./BusinessInfoFooter";
+import { isSiteAccessCredentials, SITE_ACCESS_EMAIL, SITE_ACCESS_PASSWORD } from "@/lib/site-access";
 
 export function LoginPage({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(SITE_ACCESS_EMAIL);
+  const [password, setPassword] = useState(SITE_ACCESS_PASSWORD);
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,11 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setErr(null);
     if (!email || !password) {
-      setErr("Please enter both email and password.");
+      setErr("이메일과 비밀번호를 입력하세요.");
+      return;
+    }
+    if (!isSiteAccessCredentials(email, password)) {
+      setErr("이메일 또는 비밀번호가 올바르지 않습니다.");
       return;
     }
     setLoading(true);
@@ -112,7 +117,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <Input
                   type="email"
-                  placeholder="admin@oceans.gov"
+                  placeholder={SITE_ACCESS_EMAIL}
                   className="pl-9 h-11"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

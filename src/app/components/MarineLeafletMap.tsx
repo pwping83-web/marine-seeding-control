@@ -56,6 +56,8 @@ type Props = {
   /** 관제 대시보드: 휠로 줌 레일 조절 시 Leaflet 기본 휠 줌과 충돌 방지 */
   disableScrollWheelZoom?: boolean;
   maxBounds?: LatLngBoundsExpression;
+  /** true면 XYZ 타일(인터넷) 요청 없음 — 장비 오프라인 기록 모드 */
+  offlineNoTiles?: boolean;
 };
 
 function tileUrl(basemap: MarineBasemap): string {
@@ -178,6 +180,7 @@ export function MarineLeafletMap({
   pathLatLng,
   disableScrollWheelZoom,
   maxBounds = OPS_AREA_MAX_BOUNDS,
+  offlineNoTiles = false,
 }: Props) {
   const fitPoints = useMemo(() => {
     const raw: L.LatLngExpression[] = [
@@ -195,12 +198,14 @@ export function MarineLeafletMap({
       zoom={MAP_PLACEHOLDER_ZOOM}
       minZoom={11}
       maxZoom={18}
-      className={`marine-ops-map-root z-0 h-full w-full min-h-[200px] [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:bg-black/40 [&_.leaflet-control-attribution]:text-white/70 ${className}`}
+      className={`marine-ops-map-root z-0 h-full w-full min-h-[200px] [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:bg-black/40 [&_.leaflet-control-attribution]:text-white/70 ${offlineNoTiles ? "[&_.leaflet-container]:bg-[#0a1628]" : ""} ${className}`}
       scrollWheelZoom={!disableScrollWheelZoom}
       maxBounds={maxBounds}
       maxBoundsViscosity={0.85}
     >
-      <TileLayer attribution={TILE_ATTR} url={tileUrl(basemap)} noWrap />
+      {offlineNoTiles ? null : (
+        <TileLayer attribution={TILE_ATTR} url={tileUrl(basemap)} noWrap />
+      )}
       <MapLayoutFix />
       <MapFitAndZoomRail fitNonce={fitNonce} zoomRail={zoomRail} points={fitPoints} />
       {disableScrollWheelZoom ? <DisableScrollWheelZoom /> : null}

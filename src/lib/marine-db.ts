@@ -1,4 +1,5 @@
 import type { WorkEntry } from "@/app/work-plan-types";
+import { LOCAL_RECORDING_ONLY } from "@/lib/local-recording-mode";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
 type WorkRow = {
@@ -24,6 +25,7 @@ type SeedRow = {
 };
 
 export function marineDbEnabled(): boolean {
+  if (LOCAL_RECORDING_ONLY) return false;
   return isSupabaseConfigured();
 }
 
