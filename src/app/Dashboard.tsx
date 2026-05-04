@@ -39,7 +39,7 @@ import {
   seedSeedDropRecords,
   upsertSeedDropRecord,
 } from "@/lib/marine-db";
-import { LOCAL_RECORDING_ONLY } from "@/lib/local-recording-mode";
+import { LOCAL_RECORDING_ONLY, OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +86,9 @@ const BASE_LNG = OPS_AREA_CENTER.lng;
 const MAP_W = 940;
 const MAP_H = 520;
 const VESSEL_NAME = "제3해양살포함";
+
+/** 선박 위치·항적 갱신 주기(ms). 실제 GNSS는 보통 1Hz 이상; 2초는 저속 항행·시연에 무방 */
+const VESSEL_POSITION_TICK_MS = 2000;
 
 /** 로컬 전용: 브라우저 저장소 (인터넷·DB 없음) */
 const DROP_STORAGE_KEY = "marine-seed-drops-v1";
@@ -762,7 +765,7 @@ export default function Dashboard() {
         });
         return { x: nx, y: ny, heading, lat: coords.lat, lng: coords.lng, speed: 3.2 + Math.random() * 1.2 };
       });
-    }, 2400);
+    }, VESSEL_POSITION_TICK_MS);
     return () => clearInterval(iv);
   }, []);
 
@@ -1280,7 +1283,7 @@ export default function Dashboard() {
               vessel={vessel}
               pathLatLng={pathLatLng}
               disableScrollWheelZoom
-              offlineNoTiles={LOCAL_RECORDING_ONLY}
+              offlineNoTiles={OFFLINE_MAP_NO_TILES}
             />
           </div>
 

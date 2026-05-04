@@ -100,7 +100,7 @@ export default function App() {
         });
         return { x: nx, y: ny, heading };
       });
-    }, 1500);
+    }, 2000);
 
     const dropIv = setInterval(() => {
       setVessel((v) => {
