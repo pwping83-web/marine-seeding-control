@@ -4,6 +4,7 @@ import { DataPanel } from "./components/data-panel";
 import { SeagrassMap, type DropPoint } from "./components/seagrass-map";
 import { HistoryView } from "./components/history-view";
 import { LoginPage } from "./components/login-page";
+import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 import { Bell, HelpCircle, LogOut, User } from "lucide-react";
 
@@ -202,6 +203,10 @@ export default function App() {
         ) : (
           <HistoryView drops={drops} />
         )}
+
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+          <BusinessInfoFooter className="!mt-0 !pt-0 max-w-5xl mx-auto border-0" />
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Waves, Mail, Lock, Eye, EyeOff, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { BusinessInfoFooter } from "./BusinessInfoFooter";
 
 export function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState("");
@@ -26,7 +27,8 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
   };
 
   return (
-    <div className="h-screen w-full flex bg-slate-50">
+    <div className="h-screen w-full flex flex-col bg-slate-50">
+      <div className="flex flex-1 min-h-0 w-full">
       {/* Brand panel */}
       <div className="hidden lg:flex lg:w-[44%] relative overflow-hidden bg-gradient-to-br from-[#0B2545] via-[#0d3a5f] to-[#0a4670] text-white p-12 flex-col justify-between">
         <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 400 600" preserveAspectRatio="none">
@@ -74,8 +76,8 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
           </p>
         </div>
 
-        <div className="relative text-slate-400 flex items-center justify-between" style={{ fontSize: 11 }}>
-          <span>© 2026 Ministry of Oceans & Fisheries</span>
+        <div className="relative text-slate-400 flex items-center justify-between gap-4" style={{ fontSize: 11 }}>
+          <span>© 2026 SeaRestore</span>
           <span>v2.4.1</span>
         </div>
       </div>
@@ -196,6 +198,11 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
             </div>
           </div>
         </div>
+      </div>
+      </div>
+
+      <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-8">
+        <BusinessInfoFooter className="!mt-0 !pt-0 max-w-4xl mx-auto border-0" />
       </div>
     </div>
   );
