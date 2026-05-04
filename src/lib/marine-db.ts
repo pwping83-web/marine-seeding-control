@@ -74,6 +74,19 @@ export async function insertWorkReservation(entry: WorkEntry): Promise<boolean> 
   return true;
 }
 
+export async function cancelWorkReservation(id: string): Promise<boolean> {
+  if (!marineDbEnabled()) return false;
+  const { error } = await getSupabase()
+    .from("work_reservations")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  if (error) {
+    console.warn("[marine-db] cancel work_reservations", error.message);
+    return false;
+  }
+  return true;
+}
+
 /** 최초 빈 테이블일 때 데모 일괄 삽입 */
 export async function seedWorkReservations(entries: WorkEntry[]): Promise<boolean> {
   if (!marineDbEnabled() || entries.length === 0) return false;

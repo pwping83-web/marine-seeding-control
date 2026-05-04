@@ -2,10 +2,11 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import {
   AlertCircle, CheckCircle2, XCircle, Wind, Eye, Droplets,
   Thermometer, ChevronDown, ChevronUp, MapPin, Ship, Clock,
-  Plus, X, CalendarPlus,
+  Plus, X, CalendarPlus, Ban,
 } from "lucide-react";
 import type { WorkEntry } from "./work-plan-types";
 import {
+  cancelWorkReservation,
   fetchWorkReservations,
   insertWorkReservation,
   marineDbEnabled,
@@ -331,6 +332,7 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
   const [expandedWork,  setExpandedWork]  = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showAddModal,  setShowAddModal]  = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!marineDbEnabled()) {
@@ -424,6 +426,15 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
     setSchedule((prev) => [...prev, entry].sort((a, b) => a.date.localeCompare(b.date)));
   }
 
+  async function handleCancelReservation(id: string) {
+    if (marineDbEnabled()) await cancelWorkReservation(id);
+    setSchedule((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, status: "cancelled" as const } : w)),
+    );
+    setPendingCancelId(null);
+    setExpandedWork((cur) => (cur === id ? null : cur));
+  }
+
   const upcoming    = schedule.filter((w) => w.date > todayStr && w.status !== "cancelled");
   const completed   = schedule.filter((w) => w.status === "completed");
   const weatherHold = schedule.filter((w) => w.status === "weather-hold");
@@ -445,17 +456,17 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
 
   // ── Render ──
 
+  const scrollThumb = { scrollbarWidth: "thin" as const, scrollbarColor: "#1e3a5f transparent" };
+
   return (
     <div
-      className="flex-1 overflow-y-auto p-5 space-y-4"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"
       style={{
         background: "linear-gradient(180deg, #0a1f38 0%, #071428 100%)",
-        scrollbarWidth: "thin",
-        scrollbarColor: "#1e3a5f transparent",
       }}
     >
       {marineDbEnabled() && !scheduleReady && (
-        <p className="text-center text-xs text-cyan-200/80 py-2">DB에서 작업 일정을 불러오는 중…</p>
+        <p className="shrink-0 text-center text-xs text-cyan-200/80 py-1">DB에서 작업 일정을 불러오는 중…</p>
       )}
       {/* 예약 추가 모달 */}
       {showAddModal && (
@@ -466,29 +477,30 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         />
       )}
 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
       {/* ── 1. Summary strip ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid shrink-0 grid-cols-4 gap-2 sm:gap-3">
         {[
           { label: "7일내 작업가능",  val: `${okDays}일`,    sub: `불가 ${impDays}일`,      color: "#34d399" },
           { label: "이달 예약",       val: `${upcoming.length}건`, sub: "진행 예정",         color: "#60a5fa" },
           { label: "이달 목표 달성",  val: `${monthProgress.pct}%`, sub: `${monthProgress.actual.toLocaleString()}/${monthProgress.target.toLocaleString()}`, color: "#40E0D0" },
           { label: "기상 연기",       val: `${weatherHold.length}건`, sub: "이달 포함",       color: "#fbbf24" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl px-4 py-3"
+          <div key={s.label} className="rounded-xl px-3 py-2 sm:px-4 sm:py-2.5"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <p className="text-[10px] text-white/35 tracking-wide mb-1">{s.label}</p>
-            <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.val}</p>
-            <p className="text-[10px] text-white/30 mt-1">{s.sub}</p>
+            <p className="text-[10px] text-white/35 tracking-wide mb-0.5">{s.label}</p>
+            <p className="text-xl font-bold leading-none sm:text-2xl" style={{ color: s.color }}>{s.val}</p>
+            <p className="text-[10px] text-white/30 mt-0.5 truncate">{s.sub}</p>
           </div>
         ))}
       </div>
 
       {/* ── 2. 7일 기상 예보 (compact + click to expand) ─────────────── */}
-      <div>
-        <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold mb-2.5">7일 기상 예보</p>
+      <div className="shrink-0">
+        <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold mb-1.5 sm:mb-2">7일 기상 예보</p>
 
         {/* Compact day pills */}
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
           {forecast.map((f, i) => {
             const cfg = STATUS_CFG[f.status];
             const isActive = selectedDay === i;
@@ -496,7 +508,7 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
               <button
                 key={i}
                 onClick={() => setSelectedDay(isActive ? null : i)}
-                className="rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all duration-200 hover:scale-[1.03]"
+                className="rounded-lg py-2 flex flex-col items-center gap-1 transition-all duration-200 hover:scale-[1.02] sm:rounded-xl sm:py-2.5 sm:gap-1.5"
                 style={{
                   background: isActive ? cfg.bg : "rgba(255,255,255,0.04)",
                   border: `1px solid ${isActive ? cfg.border : "rgba(255,255,255,0.07)"}`,
@@ -509,9 +521,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
                 </span>
                 <span className="text-[10px] text-white/25 font-mono">{f.date.getDate()}일</span>
                 {/* Status indicator */}
-                <span className="w-5 h-5 rounded-full flex items-center justify-center"
+                <span className="w-4 h-4 rounded-full flex items-center justify-center sm:w-5 sm:h-5"
                   style={{ background: `${cfg.color}20` }}>
-                  <cfg.Icon className="w-3 h-3" style={{ color: cfg.color }} />
+                  <cfg.Icon className="w-2.5 h-2.5 sm:w-3 sm:h-3" style={{ color: cfg.color }} />
                 </span>
                 <span className="text-[11px] font-bold font-mono" style={{ color: cfg.color }}>
                   {f.temp.toFixed(0)}°
@@ -524,13 +536,13 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         {/* Expanded detail panel (slides in below) */}
         {sel && selCfg && SelIcon && (
           <div
-            className="mt-2 rounded-xl p-4"
+            className="mt-1.5 rounded-xl p-3 sm:mt-2 sm:p-4"
             style={{
               background: selCfg.bg,
               border: `1px solid ${selCfg.border}`,
             }}
           >
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
               <div className="flex items-center gap-2">
                 <SelIcon className="w-4 h-4" style={{ color: selCfg.color }} />
                 <span className="text-sm font-bold" style={{ color: selCfg.color }}>
@@ -543,14 +555,14 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               {[
                 { Icon: Wind,        label: "풍속",  val: `${sel.windSpeed.toFixed(1)} kt`,  sub: windDirLabel(sel.windDir), over: sel.windSpeed > WIND_LIMIT },
                 { Icon: () => <span className="text-sm">≈</span>, label: "파고",  val: `${sel.waveHeight.toFixed(1)} m`,  sub: `돌풍 ${sel.windGust.toFixed(0)} kt`, over: sel.waveHeight > WAVE_LIMIT },
                 { Icon: Eye,         label: "시정",  val: `${sel.visibility.toFixed(0)} km`,  sub: sel.precipitation > 0 ? `강수 ${sel.precipitation.toFixed(0)} mm` : "강수 없음", over: sel.visibility < VIS_LIMIT },
                 { Icon: Thermometer, label: "기온",  val: `${sel.temp.toFixed(1)} °C`,  sub: `수온 ${(sel.temp - 3).toFixed(1)} °C`, over: false },
               ].map((item, k) => (
-                <div key={k} className="rounded-lg px-3 py-2.5"
+                <div key={k} className="rounded-lg px-2 py-2 sm:px-3 sm:py-2.5"
                   style={{ background: "rgba(0,0,0,0.2)" }}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <item.Icon className="w-3.5 h-3.5" style={{ color: item.over ? "#fbbf24" : "rgba(64,224,208,0.7)" }} />
@@ -578,12 +590,15 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         )}
       </div>
 
-      {/* ── 3. Two-column: Calendar + Work list ───────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-4">
+      {/* ── 3. Calendar + Work list (뷰포트 안에 맞춤; 스크롤은 이 블록 내부만) ── */}
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain lg:grid lg:grid-cols-[1fr_1.4fr] lg:gap-3 lg:overflow-hidden"
+        style={scrollThumb}
+      >
 
         {/* Calendar */}
-        <div>
-          <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold mb-2.5">
+        <div className="min-h-0 shrink-0 lg:flex lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:overscroll-y-contain" style={scrollThumb}>
+          <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold mb-1.5 sm:mb-2">
             {now.toLocaleDateString("ko-KR", { year: "numeric", month: "long" })} 캘린더
           </p>
           <div className="rounded-xl overflow-hidden"
@@ -592,7 +607,7 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
             <div className="grid grid-cols-7"
               style={{ background: "rgba(64,224,208,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               {["일","월","화","수","목","금","토"].map((d, i) => (
-                <div key={d} className="py-2 text-center text-[11px] font-bold"
+                <div key={d} className="py-1.5 text-center text-[10px] font-bold sm:py-2 sm:text-[11px]"
                   style={{ color: i === 0 ? "#fca5a5" : i === 6 ? "#93c5fd" : "rgba(255,255,255,0.4)" }}>
                   {d}
                 </div>
@@ -602,7 +617,7 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
             <div className="grid grid-cols-7">
               {grid.map((day, idx) => {
                 if (!day) return (
-                  <div key={`e-${idx}`} className="h-11"
+                  <div key={`e-${idx}`} className="h-9 sm:h-10"
                     style={{ background: "rgba(0,0,0,0.15)", borderRight: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }} />
                 );
                 const isToday   = day === today;
@@ -610,9 +625,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
                 const ws        = workMap.get(day);
                 const isImp     = impossibleDays.has(day) && !isPast;
                 const dow       = new Date(year, month, day).getDay();
-                const dotColor  = ws === "completed" ? "#34d399" : ws === "scheduled" ? "#60a5fa" : ws === "weather-hold" ? "#fbbf24" : isImp ? "#f87171" : null;
+                const dotColor  = ws === "completed" ? "#34d399" : ws === "scheduled" ? "#60a5fa" : ws === "weather-hold" ? "#fbbf24" : ws === "cancelled" ? "#94a3b8" : isImp ? "#f87171" : null;
                 return (
-                  <div key={day} className="h-11 flex flex-col items-center justify-center gap-0.5 relative"
+                  <div key={day} className="h-9 flex flex-col items-center justify-center gap-0.5 relative sm:h-10"
                     style={{
                       background: isToday ? "rgba(64,224,208,0.1)" : "rgba(255,255,255,0.015)",
                       border: isToday ? "1px solid rgba(64,224,208,0.4)" : "1px solid rgba(255,255,255,0.04)",
@@ -632,9 +647,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
               })}
             </div>
             {/* Legend */}
-            <div className="px-3 py-2 flex flex-wrap gap-3 border-t"
+            <div className="px-2 py-1.5 flex flex-wrap gap-2 border-t sm:px-3 sm:py-2 sm:gap-3"
               style={{ background: "rgba(0,0,0,0.15)", borderColor: "rgba(255,255,255,0.06)" }}>
-              {[["#34d399","완료"],["#60a5fa","예약"],["#fbbf24","기상연기"],["#f87171","불가예보"],["#40E0D0","오늘"]].map(([c,l]) => (
+              {[["#34d399","완료"],["#60a5fa","예약"],["#fbbf24","기상연기"],["#94a3b8","취소"],["#f87171","불가예보"],["#40E0D0","오늘"]].map(([c,l]) => (
                 <span key={l} className="flex items-center gap-1 text-[10px] text-white/35">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: c }} />{l}
                 </span>
@@ -643,9 +658,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
           </div>
 
           {/* Tide + conditions side panel */}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3">
             {/* Tide */}
-            <div className="rounded-xl p-3"
+            <div className="rounded-xl p-2 sm:p-3"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <p className="text-[10px] text-white/35 font-bold tracking-wide mb-2 flex items-center gap-1">
                 <Clock className="w-3 h-3" /> 오늘 조석
@@ -661,9 +676,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
               ))}
             </div>
             {/* Conditions */}
-            <div className="rounded-xl p-3"
+            <div className="rounded-xl p-2 sm:p-3"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <p className="text-[10px] text-white/35 font-bold tracking-wide mb-2">작업 기준</p>
+              <p className="text-[10px] text-white/35 font-bold tracking-wide mb-1.5 sm:mb-2">작업 기준</p>
               {[
                 { label: "풍속",  limit: `≤ ${WIND_LIMIT} kt`,  cur: weather.windSpeed, unit: "kt", ok: weather.windSpeed <= WIND_LIMIT },
                 { label: "파고",  limit: `≤ ${WAVE_LIMIT} m`,   cur: weather.waveHeight, unit: "m", ok: weather.waveHeight <= WAVE_LIMIT },
@@ -684,8 +699,8 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         </div>
 
         {/* Work schedule list */}
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
+          <div className="mb-2 flex shrink-0 items-center justify-between">
             <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold">작업 일정</p>
             <button
               onClick={() => setShowAddModal(true)}
@@ -702,7 +717,10 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
           </div>
 
           {/* Upcoming work */}
-          <div className="space-y-1.5 mb-3">
+          <div
+            className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-y-contain pr-0.5 pb-1 lg:mb-0"
+            style={scrollThumb}
+          >
             {upcoming.map((w) => {
               const d = new Date(w.date);
               const isExpanded = expandedWork === w.id;
@@ -713,7 +731,15 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
                   {/* Row header — click to expand */}
                   <button
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
-                    onClick={() => setExpandedWork(isExpanded ? null : w.id)}
+                    onClick={() => {
+                      if (isExpanded) {
+                        setExpandedWork(null);
+                        setPendingCancelId(null);
+                      } else {
+                        setExpandedWork(w.id);
+                        if (pendingCancelId !== null && pendingCancelId !== w.id) setPendingCancelId(null);
+                      }
+                    }}
                   >
                     {/* Status dot */}
                     <span className="w-2 h-2 rounded-full shrink-0 mt-0.5"
@@ -759,12 +785,50 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
                           ⚠ {w.note}
                         </div>
                       )}
+                      {(w.status === "scheduled" || w.status === "weather-hold") && (
+                        <div className="col-span-3 pt-1 border-t"
+                          style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                          {pendingCancelId === w.id ? (
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2">
+                              <p className="text-[11px] text-white/50">이 일정을 취소할까요? 취소된 예약은 목록에서 숨겨집니다.</p>
+                              <div className="flex gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingCancelId(null)}
+                                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white/50 transition-colors hover:bg-white/10"
+                                  style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
+                                  돌아가기
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleCancelReservation(w.id)}
+                                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white transition-all hover:opacity-90"
+                                  style={{
+                                    background: "rgba(248,113,113,0.2)",
+                                    border: "1px solid rgba(248,113,113,0.35)",
+                                    color: "#fca5a5",
+                                  }}>
+                                  예, 취소
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setPendingCancelId(w.id)}
+                              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white/45 transition-all hover:bg-white/[0.06] hover:text-white/70"
+                              style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+                              <Ban className="w-3.5 h-3.5" />
+                              예약 취소
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
-          </div>
 
           {/* Completed — collapsible section */}
           <button
@@ -830,7 +894,9 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
               })}
             </div>
           )}
+          </div>
         </div>
+      </div>
       </div>
     </div>
   );

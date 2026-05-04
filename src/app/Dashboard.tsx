@@ -932,7 +932,7 @@ export default function Dashboard() {
                 해양 종자 살포 관제
               </p>
               <p className="text-cyan-400/75 text-xs tracking-wide mt-0.5">
-                {VESSEL_NAME} · GNSS 살포 기록(로컬·무인증)
+                {VESSEL_NAME} · GNSS 살포 기록
               </p>
             </div>
           </div>
@@ -1048,7 +1048,7 @@ export default function Dashboard() {
             <span className="text-white/50 text-xs font-semibold tracking-wide">선박 위치</span>
             <span className="flex items-center gap-1 text-xs text-emerald-400">
               <Navigation className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] font-medium">GNSS·로컬 기록</span>
+              <span className="text-[11px] font-medium">GNSS 살포 기록</span>
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
@@ -1266,7 +1266,9 @@ export default function Dashboard() {
 
         {/* Map container / Work plan view */}
         {viewMode === "schedule" ? (
-          <WorkPlanView weather={weather} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <WorkPlanView weather={weather} />
+          </div>
         ) : null}
 
         <div
