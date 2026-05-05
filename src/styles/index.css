@@ -34,6 +34,27 @@
   justify-content: center;
 }
 
+/* 실제 GPS 모드: 배 형상 없이 중심 점 + 물결 링만 */
+.marine-gps-pin {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marine-gps-dot-core {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);
+  border: 2px solid #fff;
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.9);
+}
+
 /* 선박 위치 — AIS/레이더 비콘 스타일 확산 신호 */
 .marine-vessel-signals {
   position: absolute;

@@ -6,6 +6,7 @@ import { HistoryView } from "./components/history-view";
 import { LoginPage } from "./components/login-page";
 import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
+import type { MapMode } from "./components/seagrass-map";
 import { Bell, HelpCircle, LogOut, User } from "lucide-react";
 
 type View = "dashboard" | "history";
@@ -58,6 +59,51 @@ export default function App() {
   ]);
   const [connected] = useState(true);
   const counter = useRef(1009);
+  const [mapMode, setMapMode] = useState<MapMode>("test");
+  const [gpsVessel, setGpsVessel] = useState<{
+    lat: number;
+    lng: number;
+    heading: number;
+  } | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const geoWatchRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (mapMode !== "real") {
+      setGpsVessel(null);
+      setGpsError(null);
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+        geoWatchRef.current = 0;
+      }
+      return;
+    }
+    if (!navigator.geolocation) {
+      setGpsError("이 브라우저는 위치 정보를 지원하지 않습니다.");
+      return;
+    }
+    geoWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        setGpsError(null);
+        const h = pos.coords.heading;
+        setGpsVessel({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: typeof h === "number" && !Number.isNaN(h) ? h : 0,
+        });
+      },
+      (err) => {
+        setGpsError(err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 25_000 }
+    );
+    return () => {
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+        geoWatchRef.current = 0;
+      }
+    };
+  }, [mapMode]);
 
   useEffect(() => {
     const svg = `
@@ -87,6 +133,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (mapMode !== "test") return;
+
     const moveIv = setInterval(() => {
       setVessel((v) => {
         const dx = (Math.random() - 0.3) * 8;
@@ -132,7 +180,7 @@ export default function App() {
       clearInterval(moveIv);
       clearInterval(dropIv);
     };
-  }, []);
+  }, [mapMode]);
 
   const today = 124 + drops.length - 8;
 
@@ -197,6 +245,10 @@ export default function App() {
                 path={path}
                 connected={connected}
                 todayCount={today}
+                mapMode={mapMode}
+                onMapModeChange={setMapMode}
+                gpsVessel={gpsVessel}
+                gpsError={gpsError}
               />
             </div>
           </div>

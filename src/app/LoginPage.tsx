@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Lock, Mail, ShieldCheck, AlertCircle } from "lucide-react";
 import ManualModal, { ManualButton } from "./ManualModal";
+import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
 import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
@@ -104,7 +105,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() && !isLocalBrowserHost()) {
       try {
         const { error: signError } = await getSupabase().auth.signInWithPassword({
           email: email.trim(),

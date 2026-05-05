@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Ship,
   MapPin,
@@ -10,7 +10,7 @@ import {
   Minus,
   Crosshair,
 } from "lucide-react";
-import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "../geo/koreaOpsArea";
+import { OPS_AREA_CENTER, OPS_AREA_MAX_BOUNDS, SIM_SEA_OFFSET } from "../geo/koreaOpsArea";
 import { MarineLeafletMap } from "./MarineLeafletMap";
 
 export type DropPoint = {
@@ -23,12 +23,19 @@ export type DropPoint = {
   y: number;
 };
 
+export type MapMode = "test" | "real";
+
 type Props = {
   drops: DropPoint[];
   vessel: { x: number; y: number; heading: number };
   path: { x: number; y: number }[];
   connected: boolean;
   todayCount: number;
+  mapMode: MapMode;
+  onMapModeChange: (mode: MapMode) => void;
+  /** 실제 모드일 때만 채워짐 (WGS84) */
+  gpsVessel: { lat: number; lng: number; heading: number } | null;
+  gpsError: string | null;
 };
 
 /** App.tsx 시뮬 좌표 ↔ 위경도 (App.tsx와 동일 스케일) */
@@ -56,20 +63,44 @@ function dropStyle(status: DropPoint["status"]) {
   }
 }
 
-export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Props) {
+export function SeagrassMap({
+  drops,
+  vessel,
+  path,
+  connected,
+  todayCount,
+  mapMode,
+  onMapModeChange,
+  gpsVessel,
+  gpsError,
+}: Props) {
   const [zoomRail, setZoomRail] = useState(0);
   const [fitNonce, setFitNonce] = useState(1);
+  const hadGpsFixRef = useRef(false);
 
   const vesselLL = useMemo(() => xyToLatLng(vessel.x, vessel.y), [vessel.x, vessel.y]);
 
   const pathLatLng = useMemo(
     () =>
-      path.map((p) => {
-        const ll = xyToLatLng(p.x, p.y);
-        return [ll.lat, ll.lng] as [number, number];
-      }),
-    [path]
+      mapMode === "real"
+        ? []
+        : path.map((p) => {
+            const ll = xyToLatLng(p.x, p.y);
+            return [ll.lat, ll.lng] as [number, number];
+          }),
+    [path, mapMode]
   );
+
+  useEffect(() => {
+    if (mapMode === "real" && gpsVessel) {
+      if (!hadGpsFixRef.current) {
+        hadGpsFixRef.current = true;
+        setFitNonce((n) => n + 1);
+      }
+    } else if (mapMode === "test") {
+      hadGpsFixRef.current = false;
+    }
+  }, [mapMode, gpsVessel]);
 
   const leafletDrops = useMemo(
     () =>
@@ -88,10 +119,19 @@ export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Prop
     [drops]
   );
 
-  const vesselPos = useMemo(
-    () => ({ lat: vesselLL.lat, lng: vesselLL.lng, heading: vessel.heading }),
-    [vesselLL.lat, vesselLL.lng, vessel.heading]
-  );
+  const vesselPos = useMemo(() => {
+    if (mapMode === "real" && gpsVessel) {
+      return {
+        lat: gpsVessel.lat,
+        lng: gpsVessel.lng,
+        heading: gpsVessel.heading,
+      };
+    }
+    return { lat: vesselLL.lat, lng: vesselLL.lng, heading: vessel.heading };
+  }, [mapMode, gpsVessel, vesselLL.lat, vesselLL.lng, vessel.heading]);
+
+  const isRealWithGps = mapMode === "real" && gpsVessel != null;
+  const awaitingGps = mapMode === "real" && gpsVessel == null;
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
@@ -104,6 +144,11 @@ export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Prop
           drops={leafletDrops}
           vessel={vesselPos}
           pathLatLng={pathLatLng}
+          vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
+          panMapToVesselOnMove={isRealWithGps}
+          fitToVesselOnly={isRealWithGps}
+          hideVesselMarker={awaitingGps}
+          maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
         />
       </div>
 
@@ -157,10 +202,16 @@ export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Prop
             </div>
             <div className="flex-1">
               <div className="text-slate-500" style={{ fontSize: 11 }}>
-                Vessel — RV Poseidon
+                {mapMode === "real" ? "내 위치 (GPS)" : "Vessel — RV Poseidon"}
               </div>
               <div className="text-slate-700 tabular-nums" style={{ fontSize: 13 }}>
-                {vesselPos.lat.toFixed(4)}° N, {vesselPos.lng.toFixed(4)}° E
+                {awaitingGps ? (
+                  <span className="text-amber-700">위치 수신 대기…</span>
+                ) : (
+                  <>
+                    {vesselPos.lat.toFixed(4)}° N, {vesselPos.lng.toFixed(4)}° E
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -220,6 +271,43 @@ export function SeagrassMap({ drops, vessel, path, connected, todayCount }: Prop
             <Maximize2 className="w-4 h-4" strokeWidth={2} />
           </button>
         </div>
+      </div>
+
+      {/* 테스트 / 실제 (GPS 검증) */}
+      <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-1">
+        <div
+          className="flex rounded-md border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-sm overflow-hidden"
+          role="group"
+          aria-label="지도 위치 모드"
+        >
+          <button
+            type="button"
+            onClick={() => onMapModeChange("test")}
+            className={`px-2 py-1 text-[10px] font-medium tracking-tight transition-colors ${
+              mapMode === "test"
+                ? "bg-[#0B2545] text-white"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            테스트
+          </button>
+          <button
+            type="button"
+            onClick={() => onMapModeChange("real")}
+            className={`px-2 py-1 text-[10px] font-medium tracking-tight transition-colors border-l border-slate-200 ${
+              mapMode === "real"
+                ? "bg-cyan-700 text-white"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            실제
+          </button>
+        </div>
+        {gpsError ? (
+          <p className="max-w-[11rem] rounded border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-900 shadow-sm">
+            {gpsError}
+          </p>
+        ) : null}
       </div>
 
       {/* Legend */}

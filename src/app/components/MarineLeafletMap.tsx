@@ -41,6 +41,8 @@ export type MarineLeafletDrop = {
   highlight: boolean;
 };
 
+export type VesselMarkerVariant = "ship" | "gpsDot";
+
 type Props = {
   className?: string;
   basemap: MarineBasemap;
@@ -53,9 +55,17 @@ type Props = {
   drops: MarineLeafletDrop[];
   vessel: { lat: number; lng: number; heading: number };
   pathLatLng: [number, number][];
+  /** 실제 GPS 등: 선박 아이콘 대신 점 + 물결 링만 */
+  vesselMarkerVariant?: VesselMarkerVariant;
+  /** 위치 갱신 시 지도 중심을 선박에 맞춰 패닝(마커가 화면 밖으로 나가지 않게) */
+  panMapToVesselOnMove?: boolean;
+  /** true면 fitBounds에 살포·항적을 넣지 않고 선박 위치만 사용(실제 모드 초기 맞춤) */
+  fitToVesselOnly?: boolean;
+  /** GPS 대기 등 — 선박/위치 마커 비표시 */
+  hideVesselMarker?: boolean;
   /** 관제 대시보드: 휠로 줌 레일 조절 시 Leaflet 기본 휠 줌과 충돌 방지 */
   disableScrollWheelZoom?: boolean;
-  maxBounds?: LatLngBoundsExpression;
+  maxBounds?: LatLngBoundsExpression | null;
   /** true면 XYZ 타일(인터넷) 요청 없음 — 장비 오프라인 기록 모드 */
   offlineNoTiles?: boolean;
 };
@@ -96,11 +106,19 @@ function MapFitAndZoomRail({
         if (pts.length === 0) pts = [opsCenterTuple() as L.LatLngExpression];
         const b = L.latLngBounds(pts);
         if (b.isValid()) {
-          map.fitBounds(b, {
-            padding: [2, 2],
-            maxZoom: 18,
-            animate: true,
-          });
+          if (pts.length === 1) {
+            const p = pts[0];
+            const lat = Array.isArray(p) ? p[0] : p.lat;
+            const lng = Array.isArray(p) ? p[1] : p.lng;
+            const targetZoom = Math.min(18, 15 + rail);
+            map.setView([lat, lng], targetZoom, { animate: true });
+          } else {
+            map.fitBounds(b, {
+              padding: [2, 2],
+              maxZoom: 18,
+              animate: true,
+            });
+          }
         }
         fittedZoomRef.current = map.getZoom();
       }
@@ -144,19 +162,27 @@ function DisableScrollWheelZoom() {
 
 function VesselMarker({
   vessel,
+  variant,
 }: {
   vessel: { lat: number; lng: number; heading: number };
+  variant: VesselMarkerVariant;
 }) {
-  const icon = useMemo(
-    () =>
-      L.divIcon({
+  const icon = useMemo(() => {
+    if (variant === "gpsDot") {
+      return L.divIcon({
         className: "marine-vessel-divicon",
-        html: `<div class="marine-vessel-pin" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-vessel-hull"></div></div>`,
-        iconSize: [32, 40],
-        iconAnchor: [16, 20],
-      }),
-    [vessel.heading]
-  );
+        html: `<div class="marine-gps-pin"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-gps-dot-core"></div></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+    }
+    return L.divIcon({
+      className: "marine-vessel-divicon",
+      html: `<div class="marine-vessel-pin" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-vessel-hull"></div></div>`,
+      iconSize: [32, 40],
+      iconAnchor: [16, 20],
+    });
+  }, [vessel.heading, variant]);
 
   return (
     <Marker position={L.latLng(vessel.lat, vessel.lng)} icon={icon} zIndexOffset={800}>
@@ -169,6 +195,30 @@ function VesselMarker({
   );
 }
 
+/** 실제 위치 갱신 시 지도가 마커를 따라가도록 패닝 */
+function MapPanToVessel({
+  lat,
+  lng,
+  enabled,
+}: {
+  lat: number;
+  lng: number;
+  enabled: boolean;
+}) {
+  const map = useMap();
+  const prev = useRef<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const p = prev.current;
+    if (p && p.lat === lat && p.lng === lng) return;
+    prev.current = { lat, lng };
+    map.panTo([lat, lng], { animate: true });
+  }, [lat, lng, enabled, map]);
+
+  return null;
+}
+
 export function MarineLeafletMap({
   className = "",
   basemap,
@@ -178,11 +228,26 @@ export function MarineLeafletMap({
   drops,
   vessel,
   pathLatLng,
+  vesselMarkerVariant = "ship",
+  panMapToVesselOnMove = false,
+  fitToVesselOnly = false,
+  hideVesselMarker = false,
   disableScrollWheelZoom,
   maxBounds = OPS_AREA_MAX_BOUNDS,
   offlineNoTiles = false,
 }: Props) {
   const fitPoints = useMemo(() => {
+    if (hideVesselMarker && !fitToVesselOnly) {
+      const raw: L.LatLngExpression[] = [
+        ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
+        ...pathLatLng,
+      ];
+      const k = filterPointsNearKorea(raw);
+      return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
+    }
+    if (fitToVesselOnly) {
+      return [[vessel.lat, vessel.lng] as L.LatLngExpression];
+    }
     const raw: L.LatLngExpression[] = [
       [vessel.lat, vessel.lng],
       ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
@@ -190,24 +255,31 @@ export function MarineLeafletMap({
     ];
     const k = filterPointsNearKorea(raw);
     return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
-  }, [vessel.lat, vessel.lng, drops, pathLatLng]);
+  }, [vessel.lat, vessel.lng, drops, pathLatLng, fitToVesselOnly, hideVesselMarker]);
+
+  const boundsProps =
+    maxBounds != null
+      ? ({ maxBounds, maxBoundsViscosity: 0.85 } as const)
+      : ({} as const);
 
   return (
     <MapContainer
       center={center}
       zoom={MAP_PLACEHOLDER_ZOOM}
-      minZoom={11}
+      minZoom={maxBounds != null ? 11 : 3}
       maxZoom={18}
       className={`marine-ops-map-root z-0 h-full w-full min-h-[200px] [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:bg-black/40 [&_.leaflet-control-attribution]:text-white/70 ${offlineNoTiles ? "[&_.leaflet-container]:bg-[#0a1628]" : ""} ${className}`}
       scrollWheelZoom={!disableScrollWheelZoom}
-      maxBounds={maxBounds}
-      maxBoundsViscosity={0.85}
+      {...boundsProps}
     >
       {offlineNoTiles ? null : (
         <TileLayer attribution={TILE_ATTR} url={tileUrl(basemap)} noWrap />
       )}
       <MapLayoutFix />
       <MapFitAndZoomRail fitNonce={fitNonce} zoomRail={zoomRail} points={fitPoints} />
+      {panMapToVesselOnMove ? (
+        <MapPanToVessel lat={vessel.lat} lng={vessel.lng} enabled={panMapToVesselOnMove} />
+      ) : null}
       {disableScrollWheelZoom ? <DisableScrollWheelZoom /> : null}
 
       {pathLatLng.length > 1 ? (
@@ -246,7 +318,7 @@ export function MarineLeafletMap({
         </CircleMarker>
       ))}
 
-      <VesselMarker vessel={vessel} />
+      {hideVesselMarker ? null : <VesselMarker vessel={vessel} variant={vesselMarkerVariant} />}
     </MapContainer>
   );
 }
