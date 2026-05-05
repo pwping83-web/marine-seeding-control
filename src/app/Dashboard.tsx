@@ -27,11 +27,13 @@ import {
   ZoomIn,
   ZoomOut,
   Upload,
+  Crosshair,
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
 import { MarineLeafletMap } from "./components/MarineLeafletMap";
-import { OPS_AREA_CENTER, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
+import type { MapMode } from "./components/seagrass-map";
+import { OPS_AREA_CENTER, OPS_AREA_MAX_BOUNDS, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 import {
   fetchSeedDropRecords,
   insertShipCommand,
@@ -86,6 +88,20 @@ const BASE_LNG = OPS_AREA_CENTER.lng;
 const MAP_W = 940;
 const MAP_H = 520;
 const VESSEL_NAME = "제3해양살포함";
+
+/** GeolocationPositionError.code → 사용자용 문구 */
+function geolocationErrorMessage(err: GeolocationPositionError): string {
+  switch (err.code) {
+    case err.PERMISSION_DENIED:
+      return "위치 권한이 거부되었습니다. 주소창 왼쪽 자물쇠에서 위치를 허용해 주세요.";
+    case err.POSITION_UNAVAILABLE:
+      return "위치를 확인할 수 없습니다. GPS·네트워크를 확인해 주세요.";
+    case err.TIMEOUT:
+      return "위치 요청 시간이 초과되었습니다. 다시 눌러 시도해 주세요.";
+    default:
+      return err.message || "위치 정보를 가져오지 못했습니다.";
+  }
+}
 
 /** 선박 위치·항적 갱신 주기(ms). 실제 GNSS는 보통 1Hz 이상; 2초는 저속 항행·시연에 무방 */
 const VESSEL_POSITION_TICK_MS = 2000;
@@ -615,6 +631,16 @@ export default function Dashboard() {
   const [signalSending, setSignalSending] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "schedule">("map");
   const [manualOpen, setManualOpen] = useState(false);
+  const [mapMode, setMapMode] = useState<MapMode>("test");
+  const [gpsVessel, setGpsVessel] = useState<{
+    lat: number;
+    lng: number;
+    heading: number;
+  } | null>(null);
+  const [gpsSpeedKn, setGpsSpeedKn] = useState<number | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const geoWatchRef = useRef(0);
+  const hadGpsFixForFitRef = useRef(false);
 
   const wpIdx        = useRef(0);
   const counter      = useRef(1000 + INITIAL_SEED_COUNT + 1);
@@ -647,6 +673,25 @@ export default function Dashboard() {
     [path]
   );
 
+  const isRealWithGps = mapMode === "real" && gpsVessel != null;
+  const awaitingGps = mapMode === "real" && gpsVessel == null;
+
+  const leafletPathLatLng = useMemo(
+    () => (mapMode === "real" ? [] : pathLatLng),
+    [mapMode, pathLatLng]
+  );
+
+  const leafletVessel = useMemo(() => {
+    if (isRealWithGps && gpsVessel) {
+      return {
+        lat: gpsVessel.lat,
+        lng: gpsVessel.lng,
+        heading: gpsVessel.heading,
+      };
+    }
+    return { lat: vessel.lat, lng: vessel.lng, heading: vessel.heading };
+  }, [isRealWithGps, gpsVessel, vessel.lat, vessel.lng, vessel.heading]);
+
   const leafletDrops = useMemo(
     () =>
       filteredDrops.map((d) => ({
@@ -659,6 +704,79 @@ export default function Dashboard() {
       })),
     [filteredDrops, highlightDropId]
   );
+
+  /** watch / getCurrentPosition 공통 — 지도 앱의「내 위치」좌표 반영 */
+  const applyGeolocationCoords = useCallback((coords: GeolocationCoordinates) => {
+    const h = coords.heading;
+    const sp = coords.speed;
+    setGpsError(null);
+    setGpsVessel({
+      lat: coords.latitude,
+      lng: coords.longitude,
+      heading: typeof h === "number" && !Number.isNaN(h) ? h : 0,
+    });
+    setGpsSpeedKn(
+      typeof sp === "number" && sp >= 0 && !Number.isNaN(sp) ? sp * 1.94384 : null
+    );
+  }, []);
+
+  useEffect(() => {
+    if (mapMode !== "real") {
+      setGpsVessel(null);
+      setGpsSpeedKn(null);
+      setGpsError(null);
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+        geoWatchRef.current = 0;
+      }
+      return;
+    }
+    if (!navigator.geolocation) {
+      setGpsError("이 브라우저는 위치 정보를 지원하지 않습니다.");
+      return;
+    }
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (cancelled) return;
+        applyGeolocationCoords(pos.coords);
+      },
+      (err) => {
+        if (cancelled) return;
+        setGpsError(geolocationErrorMessage(err));
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 }
+    );
+    geoWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (cancelled) return;
+        applyGeolocationCoords(pos.coords);
+      },
+      (err) => {
+        if (cancelled) return;
+        setGpsError(geolocationErrorMessage(err));
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 25_000 }
+    );
+    return () => {
+      cancelled = true;
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+        geoWatchRef.current = 0;
+      }
+    };
+  }, [mapMode, applyGeolocationCoords]);
+
+  useEffect(() => {
+    if (mapMode === "real" && gpsVessel) {
+      if (!hadGpsFixForFitRef.current) {
+        hadGpsFixForFitRef.current = true;
+        setMapFitNonce((n) => n + 1);
+      }
+    } else if (mapMode === "test") {
+      hadGpsFixForFitRef.current = false;
+    }
+  }, [mapMode, gpsVessel]);
 
   useEffect(() => {
     if (!marineDbEnabled()) {
@@ -745,8 +863,9 @@ export default function Dashboard() {
     return () => clearTimeout(t);
   }, [drops]);
 
-  // Vessel movement
+  // Vessel movement (테스트 모드만)
   useEffect(() => {
+    if (mapMode !== "test") return;
     const iv = setInterval(() => {
       const target = WAYPOINTS[wpIdx.current % WAYPOINTS.length];
       setVessel((v) => {
@@ -767,10 +886,11 @@ export default function Dashboard() {
       });
     }, VESSEL_POSITION_TICK_MS);
     return () => clearInterval(iv);
-  }, []);
+  }, [mapMode]);
 
-  // Auto seed drop
+  // Auto seed drop (테스트 모드만)
   useEffect(() => {
+    if (mapMode !== "test") return;
     const iv = setInterval(() => {
       setVessel((v) => {
         counter.current += 1;
@@ -807,7 +927,7 @@ export default function Dashboard() {
       });
     }, 16_000);
     return () => clearInterval(iv);
-  }, []);
+  }, [mapMode]);
 
   // Weather simulation
   useEffect(() => {
@@ -868,10 +988,25 @@ export default function Dashboard() {
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
+  /** 내 위치 모드: GPS로 다시 잡고 지도 맞춤 / 테스트: 살포·항적 기준 맞춤 */
   const handleRecenter = useCallback(() => {
     setZoom(0);
+    if (mapMode === "real" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          applyGeolocationCoords(pos.coords);
+          setMapFitNonce((n) => n + 1);
+        },
+        (err) => {
+          setGpsError(geolocationErrorMessage(err));
+          setMapFitNonce((n) => n + 1);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 }
+      );
+      return;
+    }
     setMapFitNonce((n) => n + 1);
-  }, []);
+  }, [mapMode, applyGeolocationCoords]);
 
   // Mouse wheel zoom
   useEffect(() => {
@@ -990,7 +1125,13 @@ export default function Dashboard() {
           />
           <StatTile
             label="속도(노트)"
-            value={vessel.speed.toFixed(1)}
+            value={
+              mapMode === "real" && gpsVessel
+                ? gpsSpeedKn != null
+                  ? gpsSpeedKn.toFixed(1)
+                  : "—"
+                : vessel.speed.toFixed(1)
+            }
             icon={<Ship className="w-4 h-4" />}
             color="text-amber-400"
           />
@@ -1045,24 +1186,50 @@ export default function Dashboard() {
         {/* ── Vessel status (compact) ── */}
         <div className="px-4 py-2.5 border-b border-white/10 shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-white/50 text-xs font-semibold tracking-wide">선박 위치</span>
+            <span className="text-white/50 text-xs font-semibold tracking-wide">
+              {mapMode === "real" ? "내 위치 (GPS)" : "선박 위치"}
+            </span>
             <span className="flex items-center gap-1 text-xs text-emerald-400">
               <Navigation className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] font-medium">GNSS 살포 기록</span>
+              <span className="text-[11px] font-medium">
+                {mapMode === "real" ? "내 위치 찾기 켜짐" : "내 위치 찾기 꺼짐 · 시뮬"}
+              </span>
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            {[
-              { label: "북위", val: `${vessel.lat.toFixed(4)}°` },
-              { label: "동경", val: `${vessel.lng.toFixed(4)}°` },
-              { label: "방위", val: `${((vessel.heading % 360) + 360) % 360 | 0}°` },
-            ].map((r) => (
-              <div key={r.label} className="rounded-md px-2 py-1.5 text-center"
-                style={{ background: "rgba(255,255,255,0.04)" }}>
-                <p className="text-[9px] text-white/35 mb-0.5">{r.label}</p>
-                <p className="text-[11px] font-mono font-bold text-cyan-300 leading-none">{r.val}</p>
+            {awaitingGps ? (
+              <div
+                className="rounded-md px-2 py-1.5 text-center col-span-3"
+                style={{ background: "rgba(251,191,36,0.08)" }}
+              >
+                <p className="text-[9px] text-amber-200/70 mb-0.5">상태</p>
+                <p className="text-[11px] font-mono font-bold text-amber-300 leading-none">위치 수신 대기…</p>
               </div>
-            ))}
+            ) : (
+              [
+                {
+                  label: "북위",
+                  val: `${(isRealWithGps && gpsVessel ? gpsVessel.lat : vessel.lat).toFixed(4)}°`,
+                },
+                {
+                  label: "동경",
+                  val: `${(isRealWithGps && gpsVessel ? gpsVessel.lng : vessel.lng).toFixed(4)}°`,
+                },
+                {
+                  label: "방위",
+                  val: `${(((isRealWithGps && gpsVessel ? gpsVessel.heading : vessel.heading) % 360) + 360) % 360 | 0}°`,
+                },
+              ].map((r) => (
+                <div
+                  key={r.label}
+                  className="rounded-md px-2 py-1.5 text-center"
+                  style={{ background: "rgba(255,255,255,0.04)" }}
+                >
+                  <p className="text-[9px] text-white/35 mb-0.5">{r.label}</p>
+                  <p className="text-[11px] font-mono font-bold text-cyan-300 leading-none">{r.val}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -1282,8 +1449,13 @@ export default function Dashboard() {
               zoomRail={zoom}
               fitNonce={mapFitNonce}
               drops={leafletDrops}
-              vessel={vessel}
-              pathLatLng={pathLatLng}
+              vessel={leafletVessel}
+              pathLatLng={leafletPathLatLng}
+              vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
+              panMapToVesselOnMove={isRealWithGps}
+              fitToVesselOnly={isRealWithGps}
+              hideVesselMarker={awaitingGps}
+              maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
               disableScrollWheelZoom
               offlineNoTiles={OFFLINE_MAP_NO_TILES}
             />
@@ -1314,7 +1486,14 @@ export default function Dashboard() {
               <ZoomOut className="w-5 h-5" />
             </FloatBtn>
             <div className="h-px w-full bg-white/20 my-0.5" />
-            <FloatBtn onClick={handleRecenter} title="화면 중심 이동">
+            <FloatBtn
+              onClick={handleRecenter}
+              title={
+                mapMode === "real"
+                  ? "내 위치로 지도 맞추기 (GPS)"
+                  : "살포·항적이 보이도록 화면 맞춤"
+              }
+            >
               <Navigation className="w-5 h-5" />
             </FloatBtn>
             <FloatBtn
@@ -1336,6 +1515,52 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* 지도: 내 위치 찾기 토글 — 꺼짐: 선박·살포 / 켜짐: GPS */}
+          <div className="absolute bottom-6 right-4 z-30 flex flex-col items-end gap-1">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={mapMode === "real"}
+              title={
+                mapMode === "real"
+                  ? "끄면 선박 위치·항적으로 돌아갑니다"
+                  : "켜면 브라우저로 현재 위치를 찾아 표시합니다"
+              }
+              onClick={() => {
+                if (mapMode === "real") {
+                  setMapMode("test");
+                  setZoom(0);
+                  setMapFitNonce((n) => n + 1);
+                  return;
+                }
+                setMapMode("real");
+              }}
+              className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold tracking-tight shadow-lg backdrop-blur-sm transition-colors ${
+                mapMode === "real"
+                  ? "border-orange-400/80 bg-orange-500 text-[#041c2e]"
+                  : "border-white/25 bg-[#041c2e]/90 text-white/90 hover:bg-white/10"
+              }`}
+            >
+              <Crosshair
+                className={`h-[18px] w-[18px] shrink-0 stroke-[2.25] ${
+                  mapMode === "real" ? "text-[#041c2e]" : "text-white/85"
+                }`}
+                aria-hidden
+              />
+              <span className="leading-none">내 위치 찾기</span>
+            </button>
+            {mapMode === "real" && !gpsError && !gpsVessel ? (
+              <p className="max-w-[14rem] rounded-md border border-cyan-500/30 bg-[#041c2e]/90 px-2 py-1 text-[10px] text-cyan-100/90 shadow-md">
+                위치 권한을 허용하면 지도가 내 위치로 이동합니다.
+              </p>
+            ) : null}
+            {gpsError ? (
+              <p className="max-w-[14rem] rounded-md border border-amber-400/40 bg-amber-950/90 px-2 py-1 text-[10px] text-amber-100 shadow-md">
+                {gpsError}
+              </p>
+            ) : null}
+          </div>
 
           {/* Status cards (bottom-left) */}
           <div className="absolute left-4 bottom-14 z-10 flex flex-col gap-2">

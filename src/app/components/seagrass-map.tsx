@@ -273,36 +273,38 @@ export function SeagrassMap({
         </div>
       </div>
 
-      {/* 테스트 / 실제 (GPS 검증) */}
+      {/* 내 위치 찾기: 꺼짐 선박 / 켜짐 GPS */}
       <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-1">
-        <div
-          className="flex rounded-md border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-sm overflow-hidden"
-          role="group"
-          aria-label="지도 위치 모드"
+        <button
+          type="button"
+          role="switch"
+          aria-checked={mapMode === "real"}
+          title={
+            mapMode === "real"
+              ? "끄면 선박 위치·항적으로 돌아갑니다"
+              : "켜면 브라우저로 현재 위치를 찾아 표시합니다"
+          }
+          onClick={() => {
+            if (mapMode === "real") {
+              onMapModeChange("test");
+              setZoomRail(0);
+              setFitNonce((n) => n + 1);
+              return;
+            }
+            onMapModeChange("real");
+          }}
+          className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[10px] font-semibold shadow-md backdrop-blur-sm transition-colors ${
+            mapMode === "real"
+              ? "border-cyan-600 bg-cyan-600 text-white"
+              : "border-slate-200/90 bg-white/95 text-slate-700 hover:bg-slate-50"
+          }`}
         >
-          <button
-            type="button"
-            onClick={() => onMapModeChange("test")}
-            className={`px-2 py-1 text-[10px] font-medium tracking-tight transition-colors ${
-              mapMode === "test"
-                ? "bg-[#0B2545] text-white"
-                : "text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            테스트
-          </button>
-          <button
-            type="button"
-            onClick={() => onMapModeChange("real")}
-            className={`px-2 py-1 text-[10px] font-medium tracking-tight transition-colors border-l border-slate-200 ${
-              mapMode === "real"
-                ? "bg-cyan-700 text-white"
-                : "text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            실제
-          </button>
-        </div>
+          <Crosshair
+            className={`h-4 w-4 shrink-0 stroke-[2.25] ${mapMode === "real" ? "text-white" : "text-slate-600"}`}
+            aria-hidden
+          />
+          <span className="leading-none">내 위치 찾기</span>
+        </button>
         {gpsError ? (
           <p className="max-w-[11rem] rounded border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-900 shadow-sm">
             {gpsError}
