@@ -26,12 +26,14 @@ import {
   RefreshCw,
   Ship,
   Square,
+  Trash2,
   Undo2,
   Wind,
   ZoomIn,
   ZoomOut,
   Upload,
   Crosshair,
+  Sparkles,
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
@@ -39,6 +41,7 @@ import { MarineLeafletMap } from "./components/MarineLeafletMap";
 import type { MapMode } from "./components/seagrass-map";
 import { OPS_AREA_CENTER, OPS_AREA_MAX_BOUNDS, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 import {
+  deleteSeedDropRecord,
   fetchSeedDropRecords,
   fetchVesselTrackPoints,
   insertShipCommand,
@@ -65,6 +68,11 @@ import {
   WeatherAlertOverlay,
 } from "./components/EmergencyDemoOverlay";
 import { WeatherTimelineTracker } from "./components/WeatherTimelineTracker";
+import { WorkPlanAiModal } from "./components/WorkPlanAiModal";
+import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
+import { analyzeWorkPlanBriefWithGroq, type WorkPlanGroqBrief } from "@/lib/groq-work-plan";
+import { isGroqConfigured } from "@/lib/groq-weather";
+import { loadWorkAiUserNote, saveWorkAiUserNote } from "@/lib/work-ai-user-note";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -150,6 +158,13 @@ const VESSEL_POSITION_TICK_MS = 2000;
 
 /** 로컬 전용: 브라우저 저장소 (인터넷·DB 없음) */
 const DROP_STORAGE_KEY = "marine-seed-drops-v1";
+
+/** 사이드바 로고 블록과 동일 톤 — 상단 기준색 #0c2748 계열 */
+const SIDEBAR_BODY_GRAD = "linear-gradient(160deg, #0c2748 0%, #081b34 52%, #061018 100%)";
+const SIDEBAR_SECTION_TINT = "rgba(12, 39, 72, 0.42)";
+const SIDEBAR_CARD_BG = "rgba(8, 27, 52, 0.58)";
+const SIDEBAR_HISTORY_ROW_BG = "rgba(8, 27, 52, 0.82)";
+const SIDEBAR_HISTORY_FOOTER_BG = "rgba(8, 27, 52, 0.72)";
 
 function loadDropsFromLocalStorage(): SeedDrop[] | null {
   if (typeof localStorage === "undefined") return null;
@@ -452,6 +467,13 @@ function dropAgeColors(band: DropAgeBand): { fill: string; stroke: string; pulse
 function dropVisualColors(d: SeedDrop): { fill: string; stroke: string; pulse: string } {
   if (d.verificationMismatch) return { fill: "#171717", stroke: "#a3a3a3", pulse: "#737373" };
   return dropAgeColors(dropAgeBand(d.recordedAt));
+}
+
+/** 사이드바 이력 행 좌측 강조 — 상단 패널과 동일한 틸 톤(지도 연령 색과 분리) */
+function sidebarHistoryRowAccent(d: SeedDrop, isLatest: boolean): string {
+  if (d.verificationMismatch) return "rgba(148, 163, 184, 0.65)";
+  if (isLatest) return "rgba(94, 234, 212, 0.9)";
+  return "rgba(45, 212, 191, 0.55)";
 }
 
 const INITIAL_SEED_COUNT = 4;
@@ -781,6 +803,10 @@ export default function Dashboard() {
   const [safetyLevel, setSafetyLevel] = useState<"안전" | "주의" | "긴급">("안전");
   const [forecastScores, setForecastScores] = useState<SlotScore[]>([]);
   const [groqSummary, setGroqSummary] = useState<string>("");
+  const [workAiModalOpen, setWorkAiModalOpen] = useState(false);
+  const [workAiGroq, setWorkAiGroq] = useState<WorkPlanGroqBrief | null>(null);
+  const [workAiLoading, setWorkAiLoading] = useState(false);
+  const [workAiUserNote, setWorkAiUserNote] = useState("");
 
   const [showVisionModal, setShowVisionModal] = useState(false);
 
@@ -840,6 +866,11 @@ export default function Dashboard() {
     const last = lteTrackPoints[lteTrackPoints.length - 1];
     return Date.now() - new Date(last.recorded_at).getTime() < 25 * 60 * 1000;
   }, [lteTrackPoints]);
+
+  const workLocalRec = useMemo(
+    () => buildLocalWorkRecommendation(forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight),
+    [forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight],
+  );
 
   const vesselLteId = useMemo(() => vesselLteIdFromEnv(), []);
 
@@ -1407,6 +1438,18 @@ export default function Dashboard() {
     reader.readAsText(f, "UTF-8");
   }, []);
 
+  const handleDeleteDrop = useCallback(async (d: SeedDrop) => {
+    if (!window.confirm(`"${d.label}" (${d.time}) 살포 이력을 삭제할까요?`)) return;
+    if (marineDbEnabled() && dropsDbReady.current) {
+      const ok = await deleteSeedDropRecord(d.id);
+      if (!ok) {
+        window.alert("서버에서 삭제하지 못했습니다. 권한·네트워크를 확인한 뒤 다시 시도하세요.");
+        return;
+      }
+    }
+    setDrops((prev) => prev.filter((x) => x.id !== d.id));
+  }, []);
+
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
   /** 내 위치 모드: GPS로 다시 잡고 지도 맞춤 / 테스트: 살포·항적 기준 맞춤 */
@@ -1468,6 +1511,49 @@ export default function Dashboard() {
     if (viewMode === "schedule") setMapFitNonce((n) => n + 1);
   }, [viewMode]);
 
+  useEffect(() => {
+    setWorkAiUserNote(loadWorkAiUserNote());
+  }, []);
+
+  useEffect(() => {
+    if (workAiModalOpen) setWorkAiUserNote(loadWorkAiUserNote());
+  }, [workAiModalOpen]);
+
+  const saveWorkAiNote = useCallback((text: string) => {
+    saveWorkAiUserNote(text);
+    setWorkAiUserNote(text);
+  }, []);
+
+  useEffect(() => {
+    if (!workAiModalOpen) {
+      setWorkAiGroq(null);
+      setWorkAiLoading(false);
+      return;
+    }
+    setWorkAiGroq(null);
+    if (!isGroqConfigured()) {
+      setWorkAiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setWorkAiLoading(true);
+    void analyzeWorkPlanBriefWithGroq({
+      safetyLevel,
+      windMps: weather.windSpeed,
+      waveM: weather.waveHeight,
+      temp: weather.temp,
+      local: workLocalRec,
+      userNote: workAiUserNote,
+    }).then((r) => {
+      if (!cancelled && r) setWorkAiGroq(r);
+    }).finally(() => {
+      if (!cancelled) setWorkAiLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workAiModalOpen, safetyLevel, weather.windSpeed, weather.waveHeight, weather.temp, workLocalRec, workAiUserNote]);
+
   // 현재 선박 위치 (SOS 토스트 좌표)
   const sosVesselLat = vessel.lat !== 0 ? vessel.lat : 34.8756;
   const sosVesselLng = vessel.lng !== 0 ? vessel.lng : 128.6812;
@@ -1492,6 +1578,16 @@ export default function Dashboard() {
 
       <ManualModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
       <VisionRoadmapModal isOpen={showVisionModal} onClose={() => setShowVisionModal(false)} />
+      <WorkPlanAiModal
+        open={workAiModalOpen}
+        onClose={() => setWorkAiModalOpen(false)}
+        local={workLocalRec}
+        ai={workAiGroq}
+        aiLoading={workAiLoading}
+        groqConfigured={isGroqConfigured()}
+        userNote={workAiUserNote}
+        onUserNoteSave={saveWorkAiNote}
+      />
 
       {returnCommandModalOpen && (
         <div
@@ -1502,7 +1598,11 @@ export default function Dashboard() {
           onClick={() => setReturnCommandModalOpen(false)}
         >
           <div
-            className="max-w-md w-full rounded-xl border border-red-400/45 bg-[#0c1828] p-5 shadow-2xl"
+            className="max-w-md w-full rounded-xl border border-red-400/50 p-5 shadow-2xl"
+            style={{
+              background: "linear-gradient(160deg, #0c2748 0%, #081b34 100%)",
+              boxShadow: "0 32px 80px rgba(0,0,0,0.55)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="return-cmd-title" className="text-lg font-bold text-red-300 tracking-tight">
@@ -1547,8 +1647,17 @@ export default function Dashboard() {
       </div>
 
       {/* ══ SIDEBAR: h-svh 고정, 상단 고정 스택 + 이력 flex-1로 남은 세로 전부 사용 ══ */}
-      <aside className="flex h-svh min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-[#0f1520]">
-        <div className="shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#141c2a] to-[#0f1520] py-3.5 pl-4 pr-3 sm:pl-5">
+      <aside
+        className="flex h-svh min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-teal-500/20"
+        style={{ background: "linear-gradient(180deg, #0c2748 0%, #081b34 40%, #050f18 100%)" }}
+      >
+        <div
+          className="shrink-0 py-3.5 pl-4 pr-3 sm:pl-5"
+          style={{
+            background: "linear-gradient(160deg, #0c2748 0%, #081b34 100%)",
+            borderBottom: "1px solid rgba(64,224,208,0.18)",
+          }}
+        >
           <div className="flex items-center gap-2.5">
             <img src="/logo.svg" width={40} height={40} className="h-10 w-10 shrink-0 rounded-md" alt="" />
             <div className="min-w-0 flex-1 py-0.5">
@@ -1566,8 +1675,8 @@ export default function Dashboard() {
                 onClick={() => setViewMode(v)}
                 className={`flex min-h-0 flex-1 items-center justify-center gap-1 rounded-md px-1 py-1.5 text-xs font-medium transition-colors sm:text-[13px] ${
                   viewMode === v
-                    ? "bg-white/[0.09] text-slate-100 shadow-sm"
-                    : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"
+                    ? "bg-teal-500/15 text-teal-50 shadow-sm ring-1 ring-teal-400/25"
+                    : "text-slate-400 hover:bg-teal-950/30 hover:text-teal-100/90"
                 }`}
               >
                 {v === "map" ? <Map className="w-3.5 h-3.5 shrink-0 opacity-90" /> : <Calendar className="w-3.5 h-3.5 shrink-0 opacity-90" />}
@@ -1577,8 +1686,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden bg-[#0f1520]">
-        <div className="shrink-0 border-b border-white/[0.06] bg-black/[0.08] px-3 py-2">
+        <div
+          className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden"
+          style={{ background: SIDEBAR_BODY_GRAD }}
+        >
+        <div
+          className="shrink-0 border-b border-teal-500/15 px-3 py-2"
+          style={{ background: SIDEBAR_SECTION_TINT }}
+        >
           <div className="grid grid-cols-3 gap-1.5">
             {[
               {
@@ -1605,7 +1720,11 @@ export default function Dashboard() {
             ].map((c) => (
               <div
                 key={c.label}
-                className="flex min-h-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-1.5 py-2"
+                className="flex min-h-0 flex-col items-center justify-center gap-0.5 rounded-lg border px-1.5 py-2"
+                style={{
+                  background: SIDEBAR_CARD_BG,
+                  borderColor: "rgba(64,224,208,0.14)",
+                }}
               >
                 <span className="shrink-0 scale-95">{c.icon}</span>
                 <span className="text-[10px] font-medium leading-tight text-slate-500 text-center">{c.label}</span>
@@ -1628,10 +1747,10 @@ export default function Dashboard() {
           const gustStrong = weather.windGust >= 15;
           const visOk = weather.visibility >= 8;
           return (
-            <div className="shrink-0 border-b border-white/[0.06]">
+            <div className="shrink-0 border-b border-white/[0.06]" style={{ background: "rgba(12, 39, 72, 0.22)" }}>
               <div className="flex w-full items-stretch gap-0 text-left">
                 <span className="w-1 shrink-0 rounded-none" style={{ background: barColor }} />
-                <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 pr-1">
                   <span className="shrink-0 text-sm text-slate-400">{sc === "긴급" ? "!" : sc === "주의" ? "△" : "✓"}</span>
                   <div className="min-w-0 flex-1">
                     <p className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
@@ -1641,8 +1760,18 @@ export default function Dashboard() {
                     <p className="truncate text-sm font-medium leading-snug" style={{ color: verdictColor }}>{verdictText}</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setWorkAiModalOpen(true)}
+                  title="누르면 금일 작업 시간·작업량·범위 요약(보조)을 봅니다"
+                  className="work-ai-hint-btn group mr-1.5 mt-0.5 -translate-x-1 translate-y-0.5 flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-cyan-400/55 bg-gradient-to-br from-cyan-950/95 via-teal-950/90 to-slate-900/95 text-[9px] font-black leading-none tracking-tight text-cyan-50 shadow-sm transition-all hover:border-cyan-300/70 hover:from-cyan-900/95 hover:via-teal-900/92 active:scale-95"
+                  aria-label="AI 금일 작업 보조 요약 열기"
+                >
+                  <Sparkles className="mb-0.5 h-2.5 w-2.5 text-cyan-200/95 group-hover:text-cyan-100" aria-hidden />
+                  AI
+                </button>
               </div>
-              <div className="border-t border-white/[0.05] bg-black/[0.1] px-3 py-2">
+              <div className="border-t border-white/[0.05] px-3 py-2" style={{ background: SIDEBAR_SECTION_TINT }}>
                 <div className="flex items-start gap-2">
                   <SidebarWindCompass windDirDeg={weather.windDir} />
                   <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-1 text-[11px] leading-snug">
@@ -1676,14 +1805,14 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{VESSEL_NAME} · AI 요약 지도 상단 자막</p>
+                <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{VESSEL_NAME} · 기상·긴급 요약 자막(상단)</p>
               </div>
             </div>
           );
         })()}
 
         {/* 선박 위치 */}
-        <div className="shrink-0 border-b border-white/[0.06] bg-black/[0.06] px-3 py-2">
+        <div className="shrink-0 border-b border-white/[0.06] px-3 py-2" style={{ background: SIDEBAR_SECTION_TINT }}>
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium text-slate-300 inline-flex items-center gap-1.5">
               <Crosshair className="w-3.5 h-3.5 text-teal-400/55 shrink-0" aria-hidden />
@@ -1713,7 +1842,14 @@ export default function Dashboard() {
                 },
               ] as const
             ).map((c) => (
-              <div key={c.lab} className="flex flex-col items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] px-1 py-1.5 text-center">
+              <div
+                key={c.lab}
+                className="flex flex-col items-center justify-center rounded-md border px-1 py-1.5 text-center"
+                style={{
+                  background: SIDEBAR_CARD_BG,
+                  borderColor: "rgba(64,224,208,0.12)",
+                }}
+              >
                 <p className="mb-0 inline-flex w-full items-center justify-center gap-0.5 text-[10px] text-slate-500">
                   {c.icon}
                   <span>{c.lab}</span>
@@ -1734,7 +1870,10 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-1.5 border-t border-white/[0.05] bg-black/[0.08] px-3 py-2">
+          <div
+            className="grid grid-cols-2 gap-1.5 border-t border-white/[0.05] px-3 py-2"
+            style={{ background: "rgba(8, 27, 52, 0.48)" }}
+          >
             {(
               [
                 {
@@ -1788,7 +1927,14 @@ export default function Dashboard() {
                   ink: "rgba(200, 230, 252, 0.82)",
                 },
               };
-              const m = signalMuted[b.cmd];
+              const m =
+                b.cmd === "seed_start" && seedingActive
+                  ? {
+                      fill: "rgba(3, 42, 38, 0.94)",
+                      border: "rgba(16, 185, 129, 0.55)",
+                      ink: "rgba(204, 251, 229, 0.96)",
+                    }
+                  : signalMuted[b.cmd];
               return (
               <button
                 key={b.cmd}
@@ -1797,7 +1943,7 @@ export default function Dashboard() {
                 onClick={() => handleSignal(b.cmd)}
                 disabled={signalSending && b.cmd !== "seed_start" && b.cmd !== "seed_stop"}
                 className={`flex min-h-[2.5rem] items-center justify-center gap-1 rounded-md border border-solid px-1.5 py-1.5 transition-[filter,transform] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/15 active:scale-[0.98] disabled:opacity-40 ${
-                  b.cmd === "seed_start" && seedingActive ? "ring-1 ring-teal-400/25 shadow-none" : ""
+                  b.cmd === "seed_start" && seedingActive ? "seeding-start-btn-active ring-2 ring-emerald-500/35" : ""
                 }`}
                 style={{
                   borderColor: m.border,
@@ -1814,77 +1960,166 @@ export default function Dashboard() {
               );
             })}
           </div>
+          <div
+            className="flex items-center gap-2 border-t border-white/[0.05] px-3 py-2"
+            style={{ background: "rgba(12, 39, 72, 0.35)" }}
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              role="checkbox"
+              aria-checked={seedingActive}
+              aria-label="투하(종자 방류)"
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] font-black leading-none transition-colors ${
+                seedingActive
+                  ? "border-emerald-500/70 bg-emerald-600/80 text-white shadow-[0_0_0_1px_rgba(16,185,129,0.2)]"
+                  : "border-white/20 bg-black/30 text-transparent"
+              }`}
+            >
+              ✓
+            </span>
+            <span className={`text-[11px] font-medium ${seedingActive ? "text-emerald-200/90" : "text-slate-500"}`}>
+              투하 (종자 방류)
+            </span>
+          </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05]">
-          <div className="shrink-0 px-3 py-2">
-            <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
-              <Activity className="w-3 h-3 shrink-0 opacity-80" /> 종자 살포 이력
+        <div className="flex min-h-0 flex-1 flex-col border-t border-teal-500/15">
+          <div className="shrink-0 border-b border-white/[0.06] px-3 py-2" style={{ background: "rgba(12, 39, 72, 0.38)" }}>
+            <p className="flex items-center gap-1.5 text-[11px] font-medium text-teal-200/80">
+              <Activity className="h-3 w-3 shrink-0 text-teal-400/75" aria-hidden /> 종자 살포 이력
             </p>
-            <p className="text-[11px] text-slate-200 truncate leading-tight">
+            <p className="truncate text-[11px] leading-tight text-cyan-100/88">
               총 {drops.length}건
               {filteredDrops.length > 0 && (
                 <> · 최근 {filteredDrops[filteredDrops.length - 1]?.label} {filteredDrops[filteredDrops.length - 1]?.time}</>
               )}
             </p>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05] bg-black/[0.08] px-3 pb-2 pt-2">
-            <div className="grid shrink-0 grid-cols-4 gap-1 pb-1 pl-[11px] pr-2 text-[10px] font-medium text-slate-500">
-              <span>번호</span><span>시각</span><span className="text-right">위도</span><span className="text-right">경도</span>
+          <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05] px-3 pb-2 pt-2" style={{ background: "rgba(8, 27, 52, 0.35)" }}>
+            <div className="grid shrink-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] items-center gap-1 pb-1 pl-[11px] pr-1 text-[10px] font-medium text-teal-200/55">
+              <span>번호</span>
+              <span>시각</span>
+              <span className="text-right">위도</span>
+              <span className="text-right">경도</span>
+              <span className="w-7 shrink-0" aria-hidden />
             </div>
-            <div ref={logRef} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain">
+            <div
+              ref={logRef}
+              className="marine-sidebar-history-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-0.5"
+            >
               {filteredDrops.length === 0 ? (
-                <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">조회된 이력이 없습니다</p>
+                <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-teal-200/45">
+                  조회된 이력이 없습니다
+                </p>
               ) : (
                 [...filteredDrops].reverse().map((d) => {
                   const isNew = d.id === latestId;
-                  const col = dropVisualColors(d);
+                  const accent = sidebarHistoryRowAccent(d, isNew);
                   return (
-                    <div key={d.id}
-                      className={`grid grid-cols-4 gap-1 rounded-md border border-white/[0.06] bg-white/[0.025] px-1.5 py-1.5 font-mono text-[11px] leading-snug ${isNew ? "ring-1 ring-white/10" : ""}`}
-                      style={{ borderLeftWidth: 3, borderLeftColor: col.fill }}>
+                    <div
+                      key={d.id}
+                      className={`grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] items-center gap-1 rounded-md px-1.5 py-1.5 font-mono text-[11px] leading-snug ${
+                        isNew ? "ring-1 ring-teal-400/30" : ""
+                      }`}
+                      style={{
+                        background: SIDEBAR_HISTORY_ROW_BG,
+                        border: "1px solid rgba(64,224,208,0.14)",
+                        borderLeftWidth: 3,
+                        borderLeftColor: accent,
+                      }}
+                    >
                       <span className="flex min-w-0 items-center">
-                        <span className="max-w-full truncate rounded border border-white/[0.08] bg-black/20 px-1 py-0.5 text-[11px] font-medium text-slate-200">
+                        <span
+                          className="max-w-full truncate rounded-md border px-1 py-0.5 text-[11px] font-medium text-slate-200"
+                          style={{
+                            background: "rgba(12, 39, 72, 0.65)",
+                            borderColor: "rgba(64,224,208,0.2)",
+                          }}
+                        >
                           {d.label}
                         </span>
                       </span>
-                      <span className="font-medium truncate text-slate-300">{d.time}</span>
-                      <span className="text-right text-slate-400">{d.lat.toFixed(3)}</span>
-                      <span className="text-right text-slate-400">{d.lng.toFixed(3)}</span>
+                      <span className="truncate font-medium text-slate-200">{d.time}</span>
+                      <span className="text-right text-slate-300/90">{d.lat.toFixed(3)}</span>
+                      <span className="text-right text-slate-300/90">{d.lng.toFixed(3)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDrop(d)}
+                        title="이 건 삭제"
+                        aria-label={`${d.label} 살포 이력 삭제`}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-teal-200/70 transition-colors hover:border-teal-400/45 hover:bg-teal-500/10 hover:text-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/25"
+                        style={{ borderColor: "rgba(64,224,208,0.2)" }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      </button>
                     </div>
                   );
                 })
               )}
             </div>
-            <div className="mt-2 shrink-0 space-y-1.5 border-t border-white/[0.05] pt-2">
+            <div
+              className="mt-2 shrink-0 space-y-1.5 rounded-lg border px-2 py-2 pt-2.5"
+              style={{
+                background: SIDEBAR_HISTORY_FOOTER_BG,
+                borderColor: "rgba(64,224,208,0.2)",
+              }}
+            >
               <input ref={fileImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} aria-hidden />
-              <div className="flex gap-1.5 items-center">
-                <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)}
-                  className="flex-1 min-w-0 rounded-md border border-white/[0.08] bg-black/25 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-teal-500/30 [color-scheme:dark]" aria-label="시작일" />
-                <span className="text-slate-500 text-xs shrink-0">~</span>
-                <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)}
-                  className="flex-1 min-w-0 rounded-md border border-white/[0.08] bg-black/25 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-teal-500/30 [color-scheme:dark]" aria-label="종료일" />
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={filterStart}
+                  onChange={(e) => setFilterStart(e.target.value)}
+                  className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-[11px] text-cyan-100/95 outline-none transition-[border,box-shadow] [color-scheme:dark] focus:ring-2 focus:ring-teal-400/25"
+                  style={{
+                    background: "rgba(12, 39, 72, 0.75)",
+                    border: "1px solid rgba(64,224,208,0.22)",
+                  }}
+                  aria-label="시작일"
+                />
+                <span className="shrink-0 text-xs font-medium text-teal-200/55">~</span>
+                <input
+                  type="date"
+                  value={filterEnd}
+                  onChange={(e) => setFilterEnd(e.target.value)}
+                  className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-[11px] text-cyan-100/95 outline-none transition-[border,box-shadow] [color-scheme:dark] focus:ring-2 focus:ring-teal-400/25"
+                  style={{
+                    background: "rgba(12, 39, 72, 0.75)",
+                    border: "1px solid rgba(64,224,208,0.22)",
+                  }}
+                  aria-label="종료일"
+                />
                 <button
                   type="button"
                   onClick={() => fileImportRef.current?.click()}
                   title="CSV 불러오기"
-                  className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-12 py-1 rounded-md text-slate-300 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] transition-colors"
+                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-teal-100/90 transition-[background,color] hover:bg-teal-400/15 hover:text-cyan-50"
+                  style={{
+                    background: "rgba(64,224,208,0.08)",
+                    border: "1px solid rgba(64,224,208,0.22)",
+                  }}
                 >
-                  <Upload className="w-3.5 h-3.5" />
+                  <Upload className="h-3.5 w-3.5 text-teal-200/90" aria-hidden />
                   <span className="text-[9px] font-medium leading-none">불러오기</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => exportCSV(filteredDrops)}
                   title={`CSV 저장 (${filteredDrops.length}건)`}
-                  className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-12 py-1 rounded-md text-slate-900 border border-teal-400/35 bg-teal-500/75 hover:bg-teal-500/90 transition-colors"
+                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 font-bold text-cyan-50 transition-[background,filter] hover:brightness-110"
+                  style={{
+                    background: "rgba(45,212,191,0.18)",
+                    border: "1px solid rgba(94,234,212,0.45)",
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.12) inset",
+                  }}
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="h-3.5 w-3.5 text-teal-100" aria-hidden />
                   <span className="text-[9px] font-bold leading-none">CSV</span>
                 </button>
               </div>
               {(filterStart || filterEnd) && (
-                <p className="text-[10px] text-slate-500 text-center">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
+                <p className="text-center text-[10px] text-teal-200/50">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
               )}
             </div>
           </div>
@@ -1894,10 +2129,17 @@ export default function Dashboard() {
       </aside>
 
       {/* ══ MAP AREA / WORK PLAN ════════════════════════════════════════════ */}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#031928]">
+      <main
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        style={{ background: "linear-gradient(180deg, #041b2e 0%, #030f18 100%)" }}
+      >
         {/* Topbar */}
         <header
-          className="min-h-[3.25rem] shrink-0 flex items-center gap-3 px-4 sm:px-5 py-2 border-b border-white/[0.06] bg-[#0f1520]"
+          className="min-h-[3.25rem] shrink-0 flex items-center gap-3 px-4 sm:px-5 py-2"
+          style={{
+            background: "linear-gradient(180deg, #0a1f38 0%, #071428 100%)",
+            borderBottom: "1px solid rgba(64,224,208,0.12)",
+          }}
         >
           <div className="min-w-0 flex-1" aria-hidden />
 
@@ -1957,8 +2199,8 @@ export default function Dashboard() {
         {viewMode === "schedule" ? (
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
             <div
-              className="w-[min(100%,20rem)] sm:w-[22rem] shrink-0 border-r border-white/10 flex flex-col min-h-0 overflow-hidden"
-              style={{ background: "rgba(6,15,30,0.97)" }}
+              className="w-[min(100%,20rem)] sm:w-[22rem] shrink-0 flex flex-col min-h-0 overflow-hidden border-r border-teal-500/20"
+              style={{ background: "linear-gradient(180deg, #0a1f38 0%, #071428 100%)" }}
             >
               <WorkPlanView weather={weather} variant="compact" />
             </div>
@@ -2049,7 +2291,8 @@ export default function Dashboard() {
           >
             <time
               dateTime={clock.toISOString()}
-              className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.08] bg-[#0f1520]/92 px-4 py-2 sm:px-5 sm:py-2.5 font-mono tabular-nums shadow-lg shadow-black/30 ring-1 ring-inset ring-white/[0.04] backdrop-blur-md"
+              className="inline-flex items-center gap-0.5 rounded-lg border border-teal-500/25 px-4 py-2 sm:px-5 sm:py-2.5 font-mono tabular-nums shadow-lg shadow-black/30 ring-1 ring-inset ring-teal-400/10 backdrop-blur-md"
+              style={{ background: "linear-gradient(160deg, #0c2748 0%, #081b34 95%)" }}
               suppressHydrationWarning
             >
               {(() => {
@@ -2235,11 +2478,15 @@ export default function Dashboard() {
               type="button"
               onClick={() => setColorHelpOpen((o) => !o)}
               aria-expanded={colorHelpOpen}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold shadow-md backdrop-blur-sm transition-colors ${
-                colorHelpOpen
-                  ? "border-cyan-500/40 bg-[#041c2e]/95 text-white"
-                  : "border-white/20 bg-[#041c2e]/80 text-white/90 hover:bg-[#041c2e]/95"
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold shadow-md backdrop-blur-sm transition-colors ${
+                colorHelpOpen ? "text-white" : "text-white/90 hover:brightness-110"
               }`}
+              style={{
+                background: colorHelpOpen
+                  ? "linear-gradient(160deg, #0c2748 0%, #081b34 100%)"
+                  : "linear-gradient(160deg, rgba(12,39,72,0.92) 0%, rgba(8,27,52,0.96) 100%)",
+                border: colorHelpOpen ? "1px solid rgba(64,224,208,0.35)" : "1px solid rgba(64,224,208,0.22)",
+              }}
               title="살포 색상 안내"
             >
               <Info className="h-4 w-4 shrink-0 opacity-90" />
@@ -2247,8 +2494,12 @@ export default function Dashboard() {
             </button>
             {colorHelpOpen && (
               <div
-                className="w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-white/15 p-3 text-left text-white shadow-xl"
-                style={{ background: "linear-gradient(180deg, #0e2d4f 0%, #0B2545 100%)" }}
+                className="w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-xl p-3 text-left text-white shadow-xl backdrop-blur-sm"
+                style={{
+                  background: "linear-gradient(160deg, #0c2748 0%, #081b34 100%)",
+                  border: "1px solid rgba(64,224,208,0.22)",
+                  boxShadow: "0 24px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset",
+                }}
               >
                 <div className="mb-2 space-y-1.5 text-[11px] leading-relaxed text-white/55">
                   <p>살포 점 색은 기록 시각 경과에 따라 구분됩니다.</p>
@@ -2269,8 +2520,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setColorHelpOpen(false)}
-                  className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white"
-                  style={{ background: "linear-gradient(135deg, #1FB5A8 0%, #0e7490 100%)" }}
+                  className="mt-3 w-full rounded-lg border border-white/[0.08] bg-white/[0.08] py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/[0.12]"
                 >
                   닫기
                 </button>
@@ -2310,10 +2560,10 @@ function FloatBtn({
       title={title}
       className="h-11 w-11 rounded-xl flex items-center justify-center text-white/75 hover:text-white transition-all duration-150 hover:scale-110 active:scale-95"
       style={{
-        background: "rgba(9,30,56,0.88)",
+        background: "linear-gradient(160deg, rgba(12,39,72,0.92) 0%, rgba(8,27,52,0.96) 100%)",
         backdropFilter: "blur(8px)",
-        border: "1px solid rgba(255,255,255,0.15)",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.45)",
+        border: "1px solid rgba(64,224,208,0.25)",
+        boxShadow: "0 2px 14px rgba(0,0,0,0.45)",
       }}
     >
       {children}
@@ -2324,15 +2574,16 @@ function FloatBtn({
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="rounded-lg px-3 py-2.5 text-xs border border-slate-600/90"
+      className="rounded-lg px-3 py-2.5 text-xs"
       style={{
-        background: "rgba(15,23,42,0.94)",
+        background: "linear-gradient(160deg, rgba(12,39,72,0.92) 0%, rgba(8,27,52,0.96) 100%)",
+        border: "1px solid rgba(64,224,208,0.22)",
         backdropFilter: "blur(10px)",
-        boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+        boxShadow: "0 4px 18px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset",
       }}
     >
-      <p className="mb-1 text-[11px] font-medium tracking-wide text-slate-400">{label}</p>
-      <p className="text-[12px] font-semibold leading-snug text-slate-100">{value}</p>
+      <p className="mb-1 text-[11px] font-medium tracking-wide text-cyan-200/55">{label}</p>
+      <p className="text-[12px] font-semibold leading-snug text-white/90">{value}</p>
     </div>
   );
 }
@@ -2363,10 +2614,11 @@ function AiTicker({
 
   return (
     <div
-      className="w-full min-w-0 shrink-0 overflow-hidden border-b border-white/10"
+      className="w-full min-w-0 shrink-0 overflow-hidden border-b border-white/[0.06]"
       style={{
-        background: `${color}14`,
-        borderTop: `1px solid ${color}33`,
+        background: `${color}0a`,
+        borderTop: `1px solid ${color}22`,
+        backdropFilter: "blur(6px)",
       }}
       title={segment}
     >

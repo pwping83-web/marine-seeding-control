@@ -1,6 +1,6 @@
 # grant-watch — 지원사업 통합 수집
 
-IRIS(접수중) · NTIS · SMES(선택)를 돌린 뒤 키워드·마감 필터로 `artifacts/grant-watch/grant-hub-last-run.json`과 `문서/지원사업/99_공고-모니터링-최근결과.md`를 갱신합니다.
+IRIS(접수중) · NTIS · SMES(선택)를 돌린 뒤 키워드·마감 필터로 `artifacts/grant-watch/grant-hub-last-run.json`과 `docs/지원사업/99_공고-모니터링-최근결과.md`를 갱신합니다.
 
 ## 실행
 

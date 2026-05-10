@@ -132,7 +132,7 @@ const outDir = path.resolve(root, cfg.outputDir || 'artifacts/grant-watch');
 fs.mkdirSync(outDir, { recursive: true });
 const docsOutPath = path.resolve(
   root,
-  cfg.docsOutputPath || '문서/지원사업/99_공고-모니터링-최근결과.md',
+  cfg.docsOutputPath || 'docs/지원사업/99_공고-모니터링-최근결과.md',
 );
 fs.mkdirSync(path.dirname(docsOutPath), { recursive: true });
 
@@ -318,7 +318,7 @@ const portalLinks = cfg.monitorLinks || {};
 const lines = [
   '# 지원사업 공고 모니터링 최근 결과',
   '',
-  '> 이 문서는 `scripts/grant-watch/run.mjs`가 자동 생성합니다. 공고 제목은 클릭 시 상세로 연결되는 마크다운 링크입니다.',
+  '> **내부 참고용** 공개 공고 목록을 저장소 스크립트가 수집·갱신한 결과입니다. 법적 효력·최종 해석은 각 기관 게시 원문이 우선이며, 제출·계약에는 원문·공문을 사용하십시오. 아래 제목은 상세 페이지로 연결되는 링크입니다.',
   '',
   `- 생성시각: ${new Date().toLocaleString('ko-KR', { hour12: false })}`,
   `- 기준 소스: IRIS + NTIS + 중소벤처24(키 설정 시)`,

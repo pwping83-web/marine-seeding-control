@@ -432,7 +432,7 @@ export function suggestPidParams(wx: WeatherInput): PidParams {
 
 /** Arduino PID 스케치 코드 스니펫 생성 */
 export function generatePidSketch(p: PidParams): string {
-  return `// === 해양 살포 속도 PID 제어 (자동 생성) ===
+  return `// === 해양 살포 속도 PID 제어 (샘플 코드 생성) ===
 // 목표 속도: ${p.targetSpeedKt} kt
 // 조건: ${p.desc}
 

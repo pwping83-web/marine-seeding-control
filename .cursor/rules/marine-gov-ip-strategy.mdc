@@ -8,7 +8,7 @@ globs:
   - "scripts/bizinfo24-pblanc.mjs"
   - "scripts/bizinfo24-pblanc.config.json"
   - "scripts/grant-watch/**"
-  - "문서/지원사업/**"
+  - "docs/지원사업/**"
   - ".env.example"
 ---
 

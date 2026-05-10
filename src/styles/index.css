@@ -2,6 +2,26 @@
 @import './tailwind.css';
 @import './theme.css';
 
+/* 사이드바 종자 살포 이력 — 다크 UI에 맞는 스크롤바 */
+.marine-sidebar-history-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 212, 191, 0.38) rgba(8, 27, 52, 0.65);
+}
+.marine-sidebar-history-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.marine-sidebar-history-scroll::-webkit-scrollbar-track {
+  background: rgba(12, 39, 72, 0.45);
+  border-radius: 4px;
+}
+.marine-sidebar-history-scroll::-webkit-scrollbar-thumb {
+  background: rgba(64, 224, 208, 0.28);
+  border-radius: 4px;
+}
+.marine-sidebar-history-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 234, 212, 0.45);
+}
+
 /* Leaflet — 기본 z-index가 대시보드 오버레이보다 위로 올라오지 않게 */
 .leaflet-container {
   font-family: inherit;
@@ -148,5 +168,57 @@
 @media (prefers-reduced-motion: reduce) {
   .seeding-badge-breathe {
     animation: none;
+  }
+}
+
+/* 살포 시작 버튼 — 살포 중일 때 살짝 맥동 */
+@keyframes seeding-start-btn-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 14px 1px rgba(16, 185, 129, 0.28);
+    filter: brightness(1.05);
+  }
+}
+
+.seeding-start-btn-active {
+  animation: seeding-start-btn-pulse 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seeding-start-btn-active {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+  }
+}
+
+/* 사이드바 AI 버튼 — 금일 작업 보조 모달 유도(살짝 맥동) */
+@keyframes work-ai-hint-btn-attn {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(34, 211, 238, 0.35),
+      0 0 8px -2px rgba(34, 211, 238, 0.12);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(34, 211, 238, 0.55),
+      0 0 16px 0 rgba(34, 211, 238, 0.28);
+    filter: brightness(1.09);
+  }
+}
+
+.work-ai-hint-btn {
+  animation: work-ai-hint-btn-attn 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-ai-hint-btn {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.4);
   }
 }

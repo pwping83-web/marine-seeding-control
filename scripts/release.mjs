@@ -1,6 +1,6 @@
 /**
  * release / ship: 문서 백업 2종 → git 저장(commit) → 원격 푸시(Vercel 자동 배포)
- * 동의 프롬프트 없음. 메시지: npm run release -- "커밋 메시지"
+ * 확인 대화 없이 실행. 메시지: npm run release -- "커밋 메시지"
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -11,8 +11,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 process.chdir(root);
 
-const MANUAL = path.join("docs", "사용자매뉴얼_v1.5.md");
-const OVERVIEW = path.join("docs", "해양-종자-살포-관제-시스템-개요.md");
+const MANUAL = path.join("docs", "제품-운영", "사용자매뉴얼_v1.5.md");
+const OVERVIEW = path.join("docs", "제품-운영", "해양-종자-살포-관제-시스템-개요.md");
 
 for (const p of [MANUAL, OVERVIEW]) {
   if (!fs.existsSync(p)) {

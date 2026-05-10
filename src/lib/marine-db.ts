@@ -188,6 +188,16 @@ export async function seedSeedDropRecords(drops: SeedDropInput[]): Promise<boole
   return true;
 }
 
+export async function deleteSeedDropRecord(id: string): Promise<boolean> {
+  if (!marineDbEnabled()) return false;
+  const { error } = await getSupabase().from("seed_drop_records").delete().eq("id", id);
+  if (error) {
+    console.warn("[marine-db] delete seed_drop_records", error.message);
+    return false;
+  }
+  return true;
+}
+
 /** 로그인(첫 화면) 접속 시 IP·대략 위치 기록 — 이메일은 DB Webhook/Edge 등으로 별도 연동 */
 export async function logSiteAccess(info: {
   ip: string | null;

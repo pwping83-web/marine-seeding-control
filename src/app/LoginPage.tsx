@@ -5,8 +5,8 @@ import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
 // import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+import { fetchClientAccessGeo } from "@/lib/fetch-client-access-geo";
 // import {
-//   fetchClientAccessGeo,
 //   geoToAccessLocationLine,
 //   formatAccessTimeKorea,
 // } from "@/lib/fetch-client-access-geo";
@@ -64,7 +64,7 @@ const RINGS = [
 type LoginPageProps = { onSuccess: () => void };
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
-  const [email, setEmail] = useState("marine@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
@@ -356,10 +356,10 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         </div>
       </div>
       <div className="absolute bottom-4 left-5 text-[10px] font-mono text-white/20 pointer-events-none" style={{ zIndex: 2 }}>
-        해양수산부 · 해양 종자 살포 관제체계
+        해양 종자 살포 관제 시스템 · 시연
       </div>
       <div className="absolute bottom-4 right-5 text-[10px] font-mono text-white/20 pointer-events-none" style={{ zIndex: 2 }}>
-        v2.1.0 · SECURE
+        빌드 1.5.0
       </div>
 
       {/* ══ Login card ══════════════════════════════════════════════════════ */}
@@ -481,7 +481,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                     style={{ animation: "statusPulse 2s ease-in-out infinite" }}
                   />
                   <ShieldCheck className="w-3 h-3" />
-                  내부망 인증 전용
+                  내부망 접속 권장
                 </span>
                 <span
                   className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-semibold"
@@ -491,7 +491,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                     color: "rgba(255,255,255,0.45)",
                   }}
                 >
-                  관공서 납품 시연
+                  제출·설명용 시연
                 </span>
               </div>
             </div>
@@ -524,7 +524,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="예: marine@gmail.com"
+                    placeholder="기관·업체 계정 이메일"
                     className="w-full rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none transition-all duration-200"
                     style={{
                       background: "rgba(255,255,255,0.05)",

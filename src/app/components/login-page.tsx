@@ -53,7 +53,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
               SeaRestore
             </div>
             <div className="text-cyan-200" style={{ fontSize: 11, letterSpacing: 1 }}>
-              MARINE OPS · GOV PORTAL
+              MARINE OPS · DEMO UI
             </div>
           </div>
         </div>
@@ -61,20 +61,20 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
         <div className="relative space-y-4 max-w-md">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3 py-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-            <span style={{ fontSize: 11, letterSpacing: 0.5 }}>SECURE GOVERNMENT ACCESS</span>
+            <span style={{ fontSize: 11, letterSpacing: 0.5 }}>시연·데모 접속</span>
           </div>
           <h1 className="text-white" style={{ fontSize: 32, fontWeight: 600, lineHeight: 1.2 }}>
             Marine Ecosystem<br />Restoration Console
           </h1>
           <p className="text-slate-300" style={{ fontSize: 14, lineHeight: 1.6 }}>
             Real-time monitoring of vessel routes and seagrass seed-block deployments
-            across coastal restoration zones. Authorized personnel only.
+            across coastal restoration zones. 시연·제안용 화면입니다.
           </p>
         </div>
 
         <div className="relative text-slate-400 flex items-center justify-between gap-4" style={{ fontSize: 11 }}>
           <span>© 2026 SeaRestore</span>
-          <span>v2.4.1</span>
+          <span>빌드 1.5.0</span>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
               Sign in to your account
             </h2>
             <p className="text-slate-500 mt-1.5" style={{ fontSize: 13 }}>
-              Use your government-issued admin credentials.
+              기관·업체 계정으로 로그인하거나, 데모는 비워 두고 진행할 수 있습니다.
             </p>
           </div>
 
@@ -108,7 +108,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <Input
                   type="email"
-                  placeholder="marine@gmail.com"
+                  placeholder="name@organization.kr"
                   className="pl-9 h-11"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

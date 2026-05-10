@@ -15,18 +15,18 @@ const CONTACTS = [
     emergency: true,
   },
   {
-    role: "현장·장비 담당자",
-    name: "담당자명",          // ← 입력 필요
-    phone: "010-0000-0000",   // ← 입력 필요
-    note: "기계·장비·현장 문의",
+    role: "현장·장비 담당",
+    name: "제출 전 기입",
+    phone: "—",
+    note: "기계·장비·현장 문의(제출·납품 전 실명·번호로 교체)",
     color: "#fb923c",
     emergency: false,
   },
   {
-    role: "기관 담당 공무원",
-    name: "담당자명",          // ← 입력 필요
-    phone: "010-0000-0000",   // ← 입력 필요
-    note: "행정·승인·보고",
+    role: "발주·기관 담당",
+    name: "제출 전 기입",
+    phone: "—",
+    note: "행정·승인·보고(해당 시)",
     color: "#60a5fa",
     emergency: false,
   },
@@ -222,7 +222,7 @@ const SECTIONS: {
       },
       {
         heading: "지도는 실제 위성 지도인가요?",
-        body: "현재 버전은 시연용 SVG 지도입니다. 향후 국가공간정보 지도 API 연동이 예정되어 있습니다.",
+        body: "Leaflet 타일 지도입니다. 설정·망에 따라 해양·항공 위성 타일이 보이거나, 오프라인 시 단색 배경만 표시될 수 있습니다. 기관 납품 시에는 사용 허가·보안 정책에 맞는 타일·좌표계를 선택합니다.",
       },
     ],
   },
@@ -411,8 +411,9 @@ export default function ManualModal({
           {/* Footer */}
           <div className="px-5 py-6 text-center">
             <p className="text-[11px] text-white/25 leading-relaxed">
-              본 시스템은 해양수산부 납품용 관제 플랫폼입니다.<br />
-              웹 시스템 문의: {CONTACTS[0].name} ({CONTACTS[0].phone})
+              본 화면은 해양 종자 살포 관제를 위한 <strong className="text-white/35">시연·제안용 웹 구현</strong>입니다.
+              특정 기관의 공식 시스템이나 납품 완료를 의미하지 않으며, 계약·승인 범위는 별도입니다.<br />
+              웹 문의: {CONTACTS[0].name} ({CONTACTS[0].phone})
             </p>
             <p className="text-[10px] text-white/15 mt-2">
               사업자등록번호 {BIZ_NO} · v1.5 · 2026
