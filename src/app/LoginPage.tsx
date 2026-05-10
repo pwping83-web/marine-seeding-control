@@ -4,25 +4,33 @@ import ManualModal, { ManualButton } from "./ManualModal";
 import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
-import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+// import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+// import {
+//   fetchClientAccessGeo,
+//   geoToAccessLocationLine,
+//   formatAccessTimeKorea,
+// } from "@/lib/fetch-client-access-geo";
+import { reserveSiteAccessLogSlot } from "@/lib/site-access-throttle";
+import { isLoginLocked, recordLoginFailure, resetLoginGuard } from "@/lib/login-brute-guard";
+/* 공인·공동 인증서(GPKI/OIDC 게이트웨이) 로그인 — 현재 미연동으로 비활성화
 import {
-  fetchClientAccessGeo,
-  geoToAccessLocationLine,
-  formatAccessTimeKorea,
-} from "@/lib/fetch-client-access-geo";
+  isGovCertGatewayConfigured,
+  redirectToGovCertGateway,
+} from "@/lib/gov-cert-login";
+*/
 
-async function sendLoginSuccessAccessEmail(): Promise<void> {
-  if (!isEmailJsAccessNotifyConfigured()) return;
-  try {
-    const geo = await fetchClientAccessGeo();
-    await sendAccessNotifyEmail({
-      accessLocation: geoToAccessLocationLine(geo, { forEmail: true }),
-      accessTime: formatAccessTimeKorea(),
-    });
-  } catch (e) {
-    console.warn("[emailjs] 로그인 접속 알림 실패", e);
-  }
-}
+// async function sendLoginSuccessAccessEmail(): Promise<void> {
+//   if (!isEmailJsAccessNotifyConfigured()) return;
+//   try {
+//     const geo = await fetchClientAccessGeo();
+//     await sendAccessNotifyEmail({
+//       accessLocation: geoToAccessLocationLine(geo, { forEmail: true }),
+//       accessTime: formatAccessTimeKorea(),
+//     });
+//   } catch (e) {
+//     console.warn("[emailjs] 로그인 접속 알림 실패", e);
+//   }
+// }
 
 // ─── Bubble data for background particles ─────────────────────────────────────
 const BUBBLES: { left: string; size: number; dur: number; delay: number; opacity: number }[] = [
@@ -63,6 +71,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const [mounted, setMounted]   = useState(false);
   const [clock, setClock]       = useState(new Date());
   const [manualOpen, setManualOpen] = useState(false);
+  // const [certHint, setCertHint] = useState<string | null>(null); // 공인인증서 UI 비활성
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 60);
@@ -79,6 +88,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
     let cancelled = false;
     (async () => {
+      if (!reserveSiteAccessLogSlot()) return;
       const geo = await fetchClientAccessGeo();
       if (cancelled) return;
       try {
@@ -105,6 +115,12 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    // setCertHint(null); // 공인인증서 UI 비활성
+    const lock = isLoginLocked();
+    if (lock.locked) {
+      setError(`접속 시도가 일시 제한되었습니다. ${Math.ceil(lock.msLeft / 1000)}초 후 다시 시도하세요.`);
+      return;
+    }
     setLoading(true);
     if (isSupabaseConfigured() && !isLocalBrowserHost()) {
       try {
@@ -113,10 +129,16 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           password,
         });
         if (signError) {
-          setError(signError.message);
+          const r = recordLoginFailure();
+          if (r.locked) {
+            setError(`로그인 실패가 반복되어 ${Math.ceil(r.msLeft / 1000)}초간 제한됩니다.`);
+          } else {
+            setError(signError.message);
+          }
           return;
         }
-        void sendLoginSuccessAccessEmail();
+        resetLoginGuard();
+        // void sendLoginSuccessAccessEmail();
         onSuccess();
       } catch (err) {
         setError(err instanceof Error ? err.message : "연결에 실패했습니다.");
@@ -127,7 +149,8 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     }
     setTimeout(() => {
       setLoading(false);
-      void sendLoginSuccessAccessEmail();
+      resetLoginGuard();
+      // void sendLoginSuccessAccessEmail();
       onSuccess();
     }, 600);
   }
@@ -574,7 +597,49 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                 </div>
               )}
 
-              {/* Submit button */}
+              {/* 공동·금융(공인) 인증서 로그인 — GPKI/OIDC 연동 전까지 비활성화
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setError("");
+                  setCertHint(null);
+                  if (isGovCertGatewayConfigured()) {
+                    const ret =
+                      typeof window !== "undefined"
+                        ? `${window.location.pathname}${window.location.search}`
+                        : "/";
+                    redirectToGovCertGateway(ret);
+                    return;
+                  }
+                  setCertHint(
+                    "공동·금융 인증서 로그인은 GPKI·정부 표준 전자서명 게이트웨이와 Supabase(Auth OIDC/SAML 또는 Custom JWT) 연동이 필요합니다. 운영 시 `.env`의 VITE_GOVT_CERT_LOGIN_GATEWAY_URL에 IdP 시작 URL을 설정하세요.",
+                  );
+                }}
+                className="w-full rounded-xl py-3 text-xs font-semibold tracking-wide transition-all duration-200 hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(64,224,208,0.22)",
+                  color: "rgba(200,255,250,0.88)",
+                }}
+              >
+                공동·금융 인증서 로그인 (GPKI / OIDC 게이트웨이)
+              </button>
+
+              {certHint && (
+                <p
+                  className="text-[11px] leading-relaxed rounded-xl px-3 py-2"
+                  style={{
+                    background: "rgba(64,224,208,0.06)",
+                    border: "1px solid rgba(64,224,208,0.2)",
+                    color: "rgba(200,255,250,0.85)",
+                  }}
+                >
+                  {certHint}
+                </p>
+              )}
+              */}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -613,13 +678,6 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               className="mt-6 pt-5"
               style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
             >
-              <p
-                className="text-center leading-relaxed"
-                style={{ color: "rgba(255,255,255,0.28)", fontSize: 11 }}
-              >
-                Supabase 미연동 시: 이메일·비밀번호 없이도 접속 버튼만으로 대시보드로 이동합니다.
-              </p>
-
               {/* System status row */}
               <div className="mt-3 flex items-center justify-center gap-3">
                 {[

@@ -1,0 +1,8 @@
+# Supabase CLI 배포 시 프로젝트 ref 로 교체
+project_id = "marine-seeding-local"
+
+[functions.telemetry-ingest]
+verify_jwt = false
+
+[functions.vessel-track-ingest]
+verify_jwt = false

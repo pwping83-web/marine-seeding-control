@@ -209,14 +209,166 @@ export async function logSiteAccess(info: {
   if (error) console.warn("[marine-db] site_access_events", error.message);
 }
 
-export async function insertShipCommand(cmd: string, sentTime: string): Promise<void> {
-  if (!marineDbEnabled()) return;
-  const { error } = await getSupabase().from("ship_command_logs").insert({
-    cmd,
-    sent_time: sentTime,
-    ack: false,
+export type VesselTrackPoint = {
+  id: string;
+  vessel_id: string;
+  recorded_at: string;
+  lat: number;
+  lng: number;
+  speed_kn: number | null;
+  heading_deg: number | null;
+  source: string;
+};
+
+type VesselTrackRow = {
+  id: string;
+  vessel_id: string;
+  recorded_at: string;
+  lat: number;
+  lng: number;
+  speed_kn: number | null;
+  heading_deg: number | null;
+  source: string;
+};
+
+/** 선박 LTE 궤적 — 최근 N건(시간 오름차순으로 반환) */
+export async function fetchVesselTrackPoints(
+  vesselId: string,
+  limit = 400,
+): Promise<VesselTrackPoint[] | null> {
+  if (!marineDbEnabled()) return null;
+  const id = vesselId.trim();
+  if (!id) return null;
+  const { data, error } = await getSupabase()
+    .from("vessel_track_points")
+    .select("id,vessel_id,recorded_at,lat,lng,speed_kn,heading_deg,source")
+    .eq("vessel_id", id)
+    .order("recorded_at", { ascending: false })
+    .limit(Math.min(2000, Math.max(1, limit)));
+  if (error) {
+    console.warn("[marine-db] vessel_track_points", error.message);
+    return null;
+  }
+  const rows = (data as VesselTrackRow[] | null) ?? [];
+  return rows
+    .map((r) => ({
+      id: r.id,
+      vessel_id: r.vessel_id,
+      recorded_at: r.recorded_at,
+      lat: r.lat,
+      lng: r.lng,
+      speed_kn: r.speed_kn,
+      heading_deg: r.heading_deg,
+      source: r.source,
+    }))
+    .reverse();
+}
+
+/** 선박이 수동으로 현재 위치를 관제 DB에 기록 */
+export async function insertVesselTrackPoint(input: {
+  vesselId: string;
+  lat: number;
+  lng: number;
+  speedKn?: number | null;
+  headingDeg?: number | null;
+  source?: string;
+}): Promise<boolean> {
+  if (!marineDbEnabled()) return false;
+  const vid = input.vesselId.trim();
+  if (!vid) return false;
+  const id = `vt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const { error } = await getSupabase().from("vessel_track_points").insert({
+    id,
+    vessel_id: vid,
+    recorded_at: new Date().toISOString(),
+    lat: input.lat,
+    lng: input.lng,
+    speed_kn: input.speedKn ?? null,
+    heading_deg: input.headingDeg ?? null,
+    source: input.source ?? "position_report",
   });
-  if (error) console.warn("[marine-db] ship_command_logs", error.message);
+  if (error) {
+    console.warn("[marine-db] vessel_track_points insert", error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function insertShipCommand(
+  cmdOrObj: string | { id: string; vesselId: string; cmd: string },
+  sentTime?: string,
+): Promise<void> {
+  if (!marineDbEnabled()) return;
+  if (typeof cmdOrObj === "string") {
+    const { error } = await getSupabase().from("ship_command_logs").insert({
+      cmd: cmdOrObj,
+      sent_time: sentTime ?? new Date().toISOString(),
+      ack: false,
+    });
+    if (error) console.warn("[marine-db] ship_command_logs", error.message);
+  } else {
+    const { error } = await getSupabase().from("ship_command_logs").insert({
+      id: cmdOrObj.id,
+      vessel_id: cmdOrObj.vesselId,
+      cmd: cmdOrObj.cmd,
+      sent_time: new Date().toISOString(),
+      ack: false,
+    });
+    if (error) console.warn("[marine-db] ship_command_logs (extended)", error.message);
+  }
+}
+
+/** 다른 브라우저/탭과 선박 신호 동기화 — Supabase Realtime(INSERT) 구독 */
+export function subscribeShipCommandInserts(onCmd: (cmd: string) => void): () => void {
+  if (!marineDbEnabled()) return () => {};
+  const sb = getSupabase();
+  const channel = sb
+    .channel("ship-command-logs-realtime")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "ship_command_logs" },
+      (payload: { new?: Record<string, unknown> }) => {
+        const cmd = String(payload.new?.cmd ?? "");
+        if (cmd) onCmd(cmd);
+      },
+    )
+    .subscribe();
+  return () => {
+    void sb.removeChannel(channel);
+  };
+}
+
+export type ShipCommandRow = {
+  id: string;
+  vessel_id: string;
+  cmd: string;
+  createdAt: string;
+  ackedAt: string | null;
+};
+
+/** 선박에서 올라온 SOS 등 최근 N건 조회 (vessel_id 기준) */
+export async function fetchRecentShipCommands(
+  vesselId: string,
+  limit = 10,
+): Promise<ShipCommandRow[] | null> {
+  if (!marineDbEnabled()) return null;
+  const { data, error } = await getSupabase()
+    .from("ship_command_logs")
+    .select("id,vessel_id,cmd,sent_time,ack")
+    .eq("vessel_id", vesselId)
+    .order("sent_time", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[marine-db] fetchRecentShipCommands", error.message);
+    return null;
+  }
+  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id ?? ""),
+    vessel_id: String(r.vessel_id ?? ""),
+    cmd: String(r.cmd ?? ""),
+    createdAt: String(r.sent_time ?? ""),
+    ackedAt: r.ack ? String(r.sent_time ?? "") : null,
+  }));
 }
 
 /** WorkPlanView 7일 예보 한 세트 (anchor = 첫째 날짜 로컬 YMD) */

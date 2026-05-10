@@ -11,6 +11,18 @@ dist-ssr/
 .env.*
 !.env.example
 
+# 나라장터 공고 알림 스크립트 상태(로컬 전용)
+scripts/.g2b-bid-watch-state.json
+scripts/.gov-announce-watch-state.json
+scripts/.g2b-watch-schedule-marker.json
+scripts/.g2b-watch-schedule-marker
+
+# 관공서 제출용 캡처(PNG 용량·민감정보 — 필요 시 zip으로만 제출)
+관공서-제출용/captures/*.png
+
+# 지식재산·조달 로컬 메모(민감정보 — 예시만 커밋)
+docs/지식재산-및-정부납품전략/개인정보-로컬메모.md
+
 # Logs
 logs/
 *.log

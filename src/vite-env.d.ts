@@ -11,6 +11,29 @@ interface ImportMetaEnv {
   readonly VITE_EMAILJS_PUBLIC_KEY?: string;
   readonly VITE_EMAILJS_SERVICE_ID?: string;
   readonly VITE_EMAILJS_TEMPLATE_ID?: string;
+  /** 공동·금융 인증서/GPKI OIDC 등 외부 게이트웨이 시작 URL(미설정 시 로그인 화면에서 안내만) */
+  readonly VITE_GOVT_CERT_LOGIN_GATEWAY_URL?: string;
+  /** LTE 궤적 조회 시 선박 ID(DB vessel_id). 미설정 시 기본 함명 사용 */
+  readonly VITE_VESSEL_LTE_ID?: string;
+  /** 선박 궤적 폴링 주기(ms). 미설정 시 12000 */
+  readonly VITE_VESSEL_LTE_POLL_MS?: string;
+  /** DB 살포 마커 폴링(아두이노·Edge 수신 반영). 미설정 시 12000 */
+  readonly VITE_SEED_DROP_POLL_MS?: string;
+  /**
+   * 기상청 공공데이터포털 단기예보 API 인증키 (URL인코딩 값).
+   * 없으면 WeatherAIPanel이 목업 데이터로 동작(시연 모드).
+   * 발급: https://www.data.go.kr/data/15084084/openapi.do
+   */
+  readonly VITE_KMA_SERVICE_KEY?: string;
+  /** 기상청 격자 X 좌표. 기본 58(남해안 권역). */
+  readonly VITE_KMA_NX?: string;
+  /** 기상청 격자 Y 좌표. 기본 74(남해안 권역). */
+  readonly VITE_KMA_NY?: string;
+  /**
+   * Groq AI API 키 (LLM 기반 기상 분석·자연어 리포트 생성).
+   * console.groq.com 에서 발급.
+   */
+  readonly VITE_GROQ_API_KEY?: string;
 }
 
 interface ImportMeta {

@@ -1,0 +1,70 @@
+{
+  "$schemaComment": "gov-announce-watch.mjs 설정. keywords는 공고 제목(및 기관명)에 부분 일치하면 통과.",
+  "asOfDate": null,
+  "keywordMode": "any",
+  "excludeTitleSubstrings": ["실내공간정보"],
+  "keywords": [
+    "해양",
+    "수산",
+    "해도",
+    "전자해도",
+    "지도",
+    "GIS",
+    "공간정보",
+    "ENC",
+    "항해",
+    "조사",
+    "측량",
+    "종자",
+    "살포",
+    "양식",
+    "어업",
+    "관제",
+    "모니터링",
+    "IoT",
+    "LTE",
+    "위치",
+    "선박",
+    "무인",
+    "디지털",
+    "플랫폼",
+    "영상",
+    "해저",
+    "연안",
+    "오션"
+  ],
+  "sources": {
+    "kstartup": {
+      "enabled": true,
+      "url": "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do",
+      "detailBase": "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn="
+    },
+    "ngii": {
+      "enabled": true,
+      "url": "https://www.ngii.go.kr/kor/bid/list.do",
+      "detailBase": "https://www.ngii.go.kr/kor/bid/view.do?sq="
+    },
+    "kimst": {
+      "enabled": true,
+      "listUrl": "https://www.kimst.re.kr/u/rnd/inform_01/pjtAnuc.do",
+      "maxPages": 5,
+      "detailBase": "https://www.kimst.re.kr/u/rnd/inform_01/pjtAnuc.do?type=view&anucno="
+    },
+    "mof": {
+      "enabled": true,
+      "listUrl": "https://www.mof.go.kr/doc/ko/selectDocList.do?bbsSeq=9&menuSeq=375",
+      "detailBase": "https://www.mof.go.kr/doc/ko/selectDoc.do?docSeq=",
+      "menuSeq": 375,
+      "bbsSeq": 9,
+      "maxPostedAgeDays": 120
+    },
+    "khoa": {
+      "enabled": true,
+      "listUrl": "http://www.khoa.go.kr/user/bbs/selectBbsList.do?bbsMasterSeq=BOARD_MST_0000000002",
+      "detailBase": "http://www.khoa.go.kr/user/bbs/detailBbsList.do",
+      "bbsMasterSeq": "BOARD_MST_0000000002",
+      "maxPostedAgeDays": 75
+    }
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 GovAnnounceWatch/1.0"
+}

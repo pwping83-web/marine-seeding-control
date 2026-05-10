@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>해양 종자 살포 관제 — 관공서 제출용 화면 모음</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+      background: #0b1724;
+      color: #e2e8f0;
+      line-height: 1.55;
+    }
+    header {
+      padding: 1.5rem clamp(1rem, 4vw, 2.5rem);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, #0e2748 0%, #0b1724 100%);
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 0.35rem; font-weight: 700; }
+    header p { margin: 0; font-size: 0.875rem; color: #94a3b8; max-width: 52rem; }
+    main { padding: 1.25rem clamp(1rem, 4vw, 2.5rem) 3rem; max-width: 1200px; margin: 0 auto; }
+    section {
+      margin-bottom: 2rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(15, 30, 50, 0.6);
+    }
+    .cap-head {
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: rgba(0,0,0,0.25);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .cap-head code { font-size: 0.8rem; color: #7dd3fc; font-weight: 500; }
+    figure { margin: 0; }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #020617;
+    }
+    footer {
+      padding: 1rem clamp(1rem, 4vw, 2.5rem);
+      font-size: 0.75rem;
+      color: #64748b;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>해양 종자 살포 관제 웹 — 화면 캡처 모음</h1>
+    <p>
+      아래 이미지는 저장소의 <code>pnpm run capture:gov</code> 로 생성한 것입니다.
+      파일이 없으면 안내 문구만 표시됩니다. USB·PDF 제출 시 이 HTML과 <code>captures/</code> 폴더를 함께 두면 됩니다.
+    </p>
+  </header>
+  <main id="app"></main>
+  <footer>
+    본 페이지는 오프라인 열람용입니다. 실제 서비스 URL·인증은 기관 내부 정책에 따릅니다.
+  </footer>
+  <script>
+    var shots = [
+      { file: "captures/01-login.png", title: "1. 로그인(접속) 화면" },
+      { file: "captures/02-dashboard-map.png", title: "2. 실시간 관제(지도)" },
+      { file: "captures/03-color-legend.png", title: "3. 살포 색상 안내" },
+      { file: "captures/04-work-plan.png", title: "4. 작업 계획" },
+      { file: "captures/05-manual-modal.png", title: "5. 사용자 매뉴얼" },
+    ];
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    }
+
+    function render() {
+      var app = document.getElementById("app");
+      app.innerHTML = shots
+        .map(function (s) {
+          return (
+            "<section><div class=\"cap-head\">" +
+            esc(s.title) +
+            " <code>" +
+            esc(s.file) +
+            "</code></div><figure>" +
+            "<img src=\"" +
+            esc(s.file) +
+            "\" alt=\"" +
+            esc(s.title) +
+            "\" loading=\"lazy\"/>" +
+            "</figure></section>"
+          );
+        })
+        .join("");
+    }
+    render();
+  </script>
+</body>
+</html>

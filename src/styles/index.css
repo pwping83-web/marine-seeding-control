@@ -127,3 +127,26 @@
       0 0 12px 3px rgba(64, 224, 208, 0.35);
   }
 }
+
+/* 사이드바 「살포 중」 배지 — 살포 시작 후 은은한 호흡 */
+@keyframes seeding-badge-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: 0 0 10px 0 rgba(45, 212, 191, 0.22);
+  }
+}
+
+.seeding-badge-breathe {
+  animation: seeding-badge-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seeding-badge-breathe {
+    animation: none;
+  }
+}

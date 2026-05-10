@@ -1,0 +1,69 @@
+{
+  "$schemaComment": "기본값은 config.default.json 과 동일 계열. 수정 후 grant:watch 실행.",
+  "iris": {
+    "listUrl": "https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituListView.do",
+    "tab": "접수중",
+    "maxPages": 8,
+    "enrichDetailDates": true,
+    "detailLimit": 30,
+    "enrichAllMatched": true,
+    "keywords": [
+      "해양",
+      "수산",
+      "해도",
+      "전자해도",
+      "지도",
+      "GIS",
+      "공간정보",
+      "ENC",
+      "항해",
+      "조사",
+      "측량",
+      "종자",
+      "살포",
+      "양식",
+      "어업",
+      "관제",
+      "모니터링",
+      "IoT",
+      "LTE",
+      "위치",
+      "선박",
+      "무인",
+      "디지털",
+      "플랫폼",
+      "영상",
+      "해저",
+      "연안",
+      "오션",
+      "R&D",
+      "실증"
+    ]
+  },
+  "smes": {
+    "enabled": true,
+    "baseUrl": "https://www.smes.go.kr/fnct/apiReqst/extPblancInfo",
+    "authQueryKey": "token",
+    "dateRangeDays": 90,
+    "html": "no",
+    "extraQuery": {}
+  },
+  "ntis": {
+    "enabled": true,
+    "listUrl": "https://www.ntis.go.kr/rndgate/eg/un/ra/mng.do",
+    "maxPages": 6,
+    "ministryOrKeyword": true,
+    "ministries": [
+      "해양수산부",
+      "중소벤처기업부",
+      "국토교통부",
+      "과학기술정보통신부",
+      "행정안전부"
+    ]
+  },
+  "excludePastDeadline": true,
+  "dropUnparsedDeadline": false,
+  "outputDir": "artifacts/grant-watch",
+  "docsOutputPath": "문서/지원사업/99_공고-모니터링-최근결과.md",
+  "ddayAlerts": [14, 7, 3, 1, 0]
+}

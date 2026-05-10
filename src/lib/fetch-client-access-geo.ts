@@ -19,37 +19,47 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
   let region_code: string | null = null;
   let city: string | null = null;
 
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8000);
   try {
-    const ipRes = await fetch("https://api.ipify.org?format=json");
-    const ipJson = (await ipRes.json()) as { ip?: string };
-    ip = ipJson.ip ?? null;
+    const ipRes = await fetch("https://api.ipify.org?format=json", {
+      signal: ctl.signal,
+    });
+    if (!ipRes.ok) throw new Error("ipify_http");
+    const ipJson = (await ipRes.json()) as { ip?: unknown };
+    ip = typeof ipJson.ip === "string" && ipJson.ip.length < 80 ? ipJson.ip : null;
     if (ip) {
       try {
-        const geoRes = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
+        const geoRes = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, {
+          signal: ctl.signal,
+        });
+        if (!geoRes.ok) throw new Error("ipwho_http");
         const g = (await geoRes.json()) as {
           success?: boolean;
-          country?: string;
-          country_code?: string;
-          region?: string;
-          region_code?: string | number;
-          city?: string;
+          country?: unknown;
+          country_code?: unknown;
+          region?: unknown;
+          region_code?: unknown;
+          city?: unknown;
         };
-        if (g.success) {
-          country = g.country ?? null;
-          countryCode = g.country_code ?? null;
-          region = g.region ?? null;
+        if (g.success === true) {
+          country = typeof g.country === "string" ? g.country : null;
+          countryCode = typeof g.country_code === "string" ? g.country_code : null;
+          region = typeof g.region === "string" ? g.region : null;
           region_code =
             g.region_code !== undefined && g.region_code !== null
               ? String(g.region_code)
               : null;
-          city = g.city ?? null;
+          city = typeof g.city === "string" ? g.city : null;
         }
       } catch {
         /* 위치 API 실패 시 IP만 */
       }
     }
   } catch {
-    /* ipify 실패 */
+    /* ipify 실패·타임아웃 */
+  } finally {
+    clearTimeout(timer);
   }
 
   return { ip, country, countryCode, region, region_code, city };

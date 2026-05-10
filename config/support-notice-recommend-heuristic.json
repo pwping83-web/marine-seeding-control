@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "oneLinerKo": "전국 단위 OI / PoC / 창진원·대기업 연계 사업화만 1차로 보고, 입주·교육·타지역·다른 업종은 조건에 딱 맞을 때만.",
+  "purpose": "고확률만 tier1 — 추천·요약 시 1차 목록을 과감히 줄이기. 에이전트·향후 grant-watch 스코어링에서 참조.",
+  "tier1Strict": {
+    "description": "아래 keywordGroups 중 하나 이상이 제목·기관명·요약에 분명히 보일 때만 tier1 후보",
+    "matchMode": "anyGroup",
+    "keywordGroups": [
+      {
+        "id": "national_oi",
+        "label": "전국 단위·오픈이노베이션·OI",
+        "anyOf": [
+          "오픈이노베이션",
+          "오픈 이노베이션",
+          " OI",
+          "(OI",
+          "OI 공모",
+          "전국 단위",
+          "전국공모",
+          "전국 규모",
+          "수요기업 연계",
+          "수요기업 매칭"
+        ],
+        "notes": "단독 '공모'·'전국'·'수요기업'만으로는 tier1 금지 — 위 구문·OI 계열과 함께일 때만"
+      },
+      {
+        "id": "poc_pilot",
+        "label": "PoC·파일럿·시제품 실증",
+        "anyOf": ["PoC", "P.o.C", "파일럿", "시제품", "실증사업", "실증 지원"]
+      },
+      {
+        "id": "kosme_largecorp_commercialization",
+        "label": "창진원·대기업 연계·사업화",
+        "anyOf": [
+          "창업진흥원",
+          "창진원",
+          "대기업",
+          "대·중소",
+          "중소·대",
+          "상생",
+          "혁신조합",
+          "연계 사업화",
+          "기술사업화",
+          "기술도약",
+          "동반성장",
+          "오픈랩"
+        ],
+        "notes": "단독 '사업화' 한 단어만으로는 tier1 아님 — 위 키워드·기관 맥락과 함께일 때만"
+      }
+    ]
+  },
+  "notTier1If": {
+    "description": "아래가 제목·핵심 문구에 두드러지면 tier1에서 제외(해양 예외는 marineDomainRelax 참고)",
+    "titleContainsAny": [
+      "입주",
+      "창업보육",
+      "보육센터",
+      "교육과정",
+      "창업교육",
+      "아카데미",
+      "멘토링",
+      "해커톤",
+      "인턴십"
+    ]
+  },
+  "regionalOnlyPenalty": {
+    "description": "지역 접두·지자체 단독 성격이 강하고 tier1Strict 그룹이 없으면 tier1 아님",
+    "regionParenthesisPrefixes": [
+      "(서울",
+      "(부산",
+      "(대구",
+      "(인천",
+      "(광주",
+      "(대전",
+      "(울산",
+      "(세종",
+      "(경기",
+      "(강원",
+      "(충북",
+      "(충남",
+      "(전북",
+      "(전남",
+      "(경북",
+      "(경남",
+      "(제주"
+    ],
+    "extraRegionalHints": ["지자체", "시·군", "광역시"]
+  },
+  "marineDomainRelax": {
+    "description": "해양·관제·수산 직접 키가 있으면 regionalOnlyPenalty만 완화 — 입주·순수 교육은 여전히 notTier1",
+    "titleContainsAny": [
+      "해양",
+      "수산",
+      "오션",
+      "항만",
+      "선박",
+      "어업",
+      "KASS",
+      "위성",
+      "관제",
+      "GIS"
+    ]
+  },
+  "otherIndustryPenalty": {
+    "description": "본 레포(해상·관제·IoT·GIS)와 무관한 업종 전용 공고는 tier1 후보에서 제외",
+    "titleContainsAnyStrongSignal": [
+      "반도체",
+      "바이오 신약",
+      "원전",
+      "항공우주",
+      "자동차 부품"
+    ],
+    "notes": "해양·실증 키가 같이 있으면 완화 가능"
+  }
+}

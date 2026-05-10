@@ -323,7 +323,14 @@ const WORK_CFG = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function WorkPlanView({ weather }: { weather: WeatherState }) {
+export default function WorkPlanView({
+  weather,
+  variant = "full",
+}: {
+  weather: WeatherState;
+  /** compact: 제1구역 일정 중심·우측 지도와 연동용 심플 패널 */
+  variant?: "full" | "compact";
+}) {
   const [schedule, setSchedule] = useState<WorkEntry[]>(() =>
     marineDbEnabled() ? [] : INITIAL_SCHEDULE,
   );
@@ -436,6 +443,10 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
   }
 
   const upcoming    = schedule.filter((w) => w.date > todayStr && w.status !== "cancelled");
+  const zone1Upcoming = useMemo(
+    () => upcoming.filter((w) => w.zone.startsWith("제1")).sort((a, b) => a.date.localeCompare(b.date)),
+    [upcoming],
+  );
   const completed   = schedule.filter((w) => w.status === "completed");
   const weatherHold = schedule.filter((w) => w.status === "weather-hold");
 
@@ -477,6 +488,75 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         />
       )}
 
+      {variant === "compact" ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+          <div className="shrink-0 border-b border-white/10 pb-2">
+            <h2 className="text-sm font-bold text-white tracking-tight">작업 계획</h2>
+            <p className="text-[10px] text-cyan-200/80 mt-1 leading-snug">
+              제1구역 A·B·C 후보는 우측 지도에 표시됩니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="shrink-0 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-bold transition-all hover:scale-[1.01] active:scale-[0.99]"
+            style={{
+              background: "linear-gradient(135deg, #1FB5A8 0%, #0e7490 100%)",
+              color: "#fff",
+              boxShadow: "0 2px 10px rgba(31,181,168,0.35)",
+            }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            예약 추가
+          </button>
+          <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+            <p className="text-[10px] text-white/35 font-bold uppercase tracking-wide shrink-0 mb-1">제1구역 예정</p>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5" style={scrollThumb}>
+              {zone1Upcoming.length === 0 ? (
+                <p className="text-[11px] text-white/40 py-2">예정된 제1구역 일정이 없습니다.</p>
+              ) : (
+                zone1Upcoming.map((w) => {
+                  const d = new Date(w.date);
+                  const cfg = WORK_CFG[w.status];
+                  return (
+                    <div
+                      key={w.id}
+                      className="rounded-lg px-3 py-2"
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: `1px solid ${cfg.color}33`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono text-white/55 shrink-0">
+                          {d.getMonth() + 1}/{d.getDate()}({KO_DAYS[d.getDay()]})
+                        </span>
+                        <span className="text-xs font-bold text-teal-200 truncate">{w.zone}</span>
+                        <span
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{
+                            background: `${cfg.color}18`,
+                            color: cfg.color,
+                            border: `1px solid ${cfg.color}40`,
+                          }}
+                        >
+                          {cfg.label}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-white/35 mt-1">
+                        목표 {w.targetSeeds.toLocaleString()}개체 · {w.vessel}
+                      </p>
+                      {w.note ? (
+                        <p className="text-[10px] text-amber-200/90 mt-1 leading-snug">⚠ {w.note}</p>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
       {/* ── 1. Summary strip ──────────────────────────────────────────── */}
       <div className="grid shrink-0 grid-cols-4 gap-2 sm:gap-3">
@@ -898,6 +978,7 @@ export default function WorkPlanView({ weather }: { weather: WeatherState }) {
         </div>
       </div>
       </div>
+      )}
     </div>
   );
 }

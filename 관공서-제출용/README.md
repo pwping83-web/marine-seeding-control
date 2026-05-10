@@ -1,0 +1,41 @@
+# 관공서 제출용 화면 자료
+
+해양 종자 살포 **관제 웹**의 주요 화면을 캡처해 제출·설명 자료로 쓰는 폴더입니다.
+
+## 문서(시험·실증 계획)
+
+**연못 → 호수 → 강 → 바다** 순으로 아두이노·웹 연동을 시험한다는 **세부계획서(샘플)** 는 [`docs/`](./docs/) 폴더에 있습니다. 제출 시 기술 요약과 함께 묶으려면 저장소의 `docs/관공서_설명용_해상종자살포_단말·연동요약.md` 와 대조하세요.
+
+## 생성 방법
+
+1. 캡처할 화면이 떠 있어야 합니다.  
+   - **로컬 시연:** `pnpm dev` (기본 `http://localhost:5111` — `vite.config.ts` 의 `DEV_PORT`)  
+   - **문서 기준 LAN 시연:** `http://192.168.45.214:5111/`  
+   - **배포 URL만 캡처:** 서버 없이 `https://marine-seeding-control-git-main-pwping83-webs-projects.vercel.app/` 지정 가능
+2. 다른 터미널에서:
+
+```bash
+pnpm run capture:gov
+```
+
+환경 변수(선택):
+
+- `CAPTURE_URL` — 기본 `http://localhost:5111/` · LAN 시연은 `http://192.168.45.214:5111/` · 배포는 `https://marine-seeding-control-git-main-pwping83-webs-projects.vercel.app/`
+- `CAPTURE_OUT_DIR` — 기본 이 폴더의 `captures/`
+
+3. 생성된 PNG를 확인한 뒤, 필요하면 `index.html`을 브라우저로 열어 **한 번에 미리보기**합니다. (`index.html`은 `captures/` 안의 파일명을 참조합니다.)
+
+## 포함되는 캡처(파일명)
+
+| 파일 | 내용 |
+|------|------|
+| `01-login.png` | 로그인(접속) 화면 |
+| `02-dashboard-map.png` | 대시보드 — 실시간 관제(지도) |
+| `03-color-legend.png` | 살포 색상 안내 패널 |
+| `04-work-plan.png` | 작업 계획 탭 |
+| `05-manual-modal.png` | 사용자 매뉴얼(시스템 개요 등) |
+
+## 제출 시 참고
+
+- 제출처 요구에 맞춰 **PDF로 묶기**, 또는 **인쇄 → 스캔**을 병행하세요.
+- 스크린샷에 **개인 연락처**가 보이면 제출 전에 마스킹할지 검토하세요(매뉴얼 내 연락처 카드).

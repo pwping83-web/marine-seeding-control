@@ -10,19 +10,23 @@ import {
 import {
   Activity,
   AlertCircle,
+  ArrowRight,
+  ArrowUp,
   Calendar,
   CheckCircle2,
+  Compass,
   Download,
   Droplets,
-  Eye,
   Info,
   Map,
   MapPin,
   Navigation,
+  Play,
   Radio,
   RefreshCw,
   Ship,
-  Thermometer,
+  Square,
+  Undo2,
   Wind,
   ZoomIn,
   ZoomOut,
@@ -36,12 +40,31 @@ import type { MapMode } from "./components/seagrass-map";
 import { OPS_AREA_CENTER, OPS_AREA_MAX_BOUNDS, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
 import {
   fetchSeedDropRecords,
+  fetchVesselTrackPoints,
   insertShipCommand,
+  insertVesselTrackPoint,
   marineDbEnabled,
   seedSeedDropRecords,
+  subscribeShipCommandInserts,
   upsertSeedDropRecord,
+  type VesselTrackPoint,
 } from "@/lib/marine-db";
-import { LOCAL_RECORDING_ONLY, OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
+import { OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
+import { WeatherAIPanel } from "./components/WeatherAIPanel";
+import { EmergencyPanel } from "./components/EmergencyPanel";
+import { VisionRoadmapModal } from "./components/VisionRoadmapModal";
+import {
+  scoreHourSlot,
+  generateMockForecast,
+  type EmergencyAssessment,
+  type SlotScore,
+} from "@/lib/kma-weather";
+import { ZONE1_PLAN_MARKERS } from "@/lib/seeding-plan-ai";
+import {
+  SosReceivedToast,
+  WeatherAlertOverlay,
+} from "./components/EmergencyDemoOverlay";
+import { WeatherTimelineTracker } from "./components/WeatherTimelineTracker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +104,9 @@ interface SignalEntry {
   ack: boolean;
 }
 
+/** Supabase 없을 때 동일 출처 탭 간 선박 신호 시연 동기화 */
+const MARINE_OPS_SIGNAL_BC = "marine-ops-signals-v1";
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const BASE_LAT = OPS_AREA_CENTER.lat;
@@ -88,6 +114,22 @@ const BASE_LNG = OPS_AREA_CENTER.lng;
 const MAP_W = 940;
 const MAP_H = 520;
 const VESSEL_NAME = "제3해양살포함";
+
+function vesselLteIdFromEnv(): string {
+  const v = import.meta.env.VITE_VESSEL_LTE_ID?.trim();
+  return v && v.length > 0 ? v : VESSEL_NAME;
+}
+
+/** 두 좌표 사이 진북 방위각(도) — 선수 방향 표시용 */
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+}
 
 /** GeolocationPositionError.code → 사용자용 문구 */
 function geolocationErrorMessage(err: GeolocationPositionError): string {
@@ -291,6 +333,89 @@ function windDirLabel(deg: number): string {
   return dirs[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
 }
 
+/** 풍향(바람이 오는 방향) 기준 — 바람이 향하는 쪽으로 청색 침 표시 */
+function SidebarWindCompass({ windDirDeg }: { windDirDeg: number }) {
+  const cx = 50;
+  const cy = 50;
+  const blow = ((windDirDeg + 180) % 360 + 360) % 360;
+  const rad = (blow * Math.PI) / 180;
+  const len = 32;
+  const tipX = cx + len * Math.sin(rad);
+  const tipY = cy - len * Math.cos(rad);
+  const backLen = 8;
+  const bx = cx - backLen * Math.sin(rad);
+  const by = cy + backLen * Math.cos(rad);
+  const perp = 4;
+  const vx = Math.cos(rad) * perp;
+  const vy = Math.sin(rad) * perp;
+  const cardinals: { d: number; ch: string; x: number; y: number; anchor: "middle" | "start" | "end" }[] = [
+    { d: 0, ch: "N", x: 50, y: 12, anchor: "middle" },
+    { d: 90, ch: "E", x: 88, y: 54, anchor: "middle" },
+    { d: 180, ch: "S", x: 50, y: 92, anchor: "middle" },
+    { d: 270, ch: "W", x: 12, y: 54, anchor: "middle" },
+  ];
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className="h-[48px] w-[48px] shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
+      role="img"
+      aria-label={`풍향 나침반, 바람 향함 약 ${Math.round(blow)}°`}
+    >
+      <defs>
+        <linearGradient id="sidebarCompassFace" x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#1e293b" />
+          <stop offset="100%" stopColor="#0c1526" />
+        </linearGradient>
+        <linearGradient id="sidebarCompassNeedle" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#bae6fd" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r="47" fill="url(#sidebarCompassFace)" stroke="#475569" strokeWidth="1.1" />
+      {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((d) => {
+        const br = (d * Math.PI) / 180;
+        const r1 = d % 90 === 0 ? 36 : 38;
+        const r2 = 46;
+        return (
+          <line
+            key={d}
+            x1={cx + r1 * Math.sin(br)}
+            y1={cy - r1 * Math.cos(br)}
+            x2={cx + r2 * Math.sin(br)}
+            y2={cy - r2 * Math.cos(br)}
+            stroke={d % 90 === 0 ? "#94a3b8" : "#64748b"}
+            strokeWidth={d % 90 === 0 ? 1.1 : 0.55}
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {cardinals.map(({ d, ch, x, y, anchor }) => (
+        <text
+          key={d}
+          x={x}
+          y={y}
+          textAnchor={anchor}
+          fill="#94a3b8"
+          fontSize="10"
+          fontWeight="700"
+          style={{ fontFamily: "system-ui, sans-serif" }}
+        >
+          {ch}
+        </text>
+      ))}
+      <polygon
+        points={`${tipX},${tipY} ${bx + vx},${by - vy} ${bx - vx},${by + vy}`}
+        fill="url(#sidebarCompassNeedle)"
+        stroke="#0ea5e9"
+        strokeWidth="0.35"
+        strokeLinejoin="round"
+      />
+      <circle cx={cx} cy={cy} r="4.5" fill="#1e293b" stroke="#64748b" strokeWidth="0.8" />
+      <circle cx={cx} cy={cy} r="1.8" fill="#38bdf8" />
+    </svg>
+  );
+}
+
 function initWeather(): WeatherState {
   return {
     windSpeed: 8 + Math.random() * 5,
@@ -330,6 +455,12 @@ function dropVisualColors(d: SeedDrop): { fill: string; stroke: string; pulse: s
 }
 
 const INITIAL_SEED_COUNT = 4;
+/** 사이드바 금일·누적 표시용 기준값(과거 UI와 동일 톤) */
+const DAILY_SEED_DISPLAY_BASE = 124;
+const CUMULATIVE_SEED_BASE = 1840;
+function mpsToKt(mps: number) {
+  return mps * 1.94384;
+}
 const SEED_AGE_DAYS = [820, 420, 95, 3];
 
 // 초기 구역별 카운터 — seedInitial 이후 Dashboard 에서 동기화
@@ -551,8 +682,8 @@ function SignalPanel({
     <div className="px-5 py-3 border-b border-white/10 shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-2.5">
-        <span className="text-white/55 text-xs font-semibold tracking-wide flex items-center gap-1.5">
-          <Radio className="w-3.5 h-3.5 text-cyan-400" />
+        <span className="flex items-center gap-1.5 text-xs font-semibold tracking-tight text-white">
+          <Radio className="h-3.5 w-3.5 shrink-0 text-white" aria-hidden />
           선박 신호 송신
         </span>
         <span
@@ -617,7 +748,7 @@ export default function Dashboard() {
   const [vessel, setVessel] = useState<Vessel>(() => {
     const wp = WAYPOINTS[0];
     const coords = xyToLatLng(wp.x, wp.y);
-    return { x: wp.x, y: wp.y, heading: 45, lat: coords.lat, lng: coords.lng, speed: 4.2 };
+    return { x: wp.x, y: wp.y, heading: 45, lat: coords.lat, lng: coords.lng, speed: 3.7 };
   });
   const [path, setPath] = useState<{ x: number; y: number }[]>([]);
   const [zoom, setZoom] = useState(0);
@@ -625,10 +756,13 @@ export default function Dashboard() {
   const [clock, setClock] = useState(() => new Date());
   const [colorHelpOpen, setColorHelpOpen] = useState(false);
   const fileImportRef = useRef<HTMLInputElement>(null);
-  const [totalToday] = useState(124);
   const [weather, setWeather] = useState<WeatherState>(initWeather);
   const [signals, setSignals] = useState<SignalEntry[]>([]);
   const [signalSending, setSignalSending] = useState(false);
+  /** 살포 시작/중지 — DB·BroadcastChannel으로 모든 접속 화면 동기 */
+  const [seedingActive, setSeedingActive] = useState(false);
+  const [returnCommandModalOpen, setReturnCommandModalOpen] = useState(false);
+  const [positionReportToast, setPositionReportToast] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "schedule">("map");
   const [manualOpen, setManualOpen] = useState(false);
   const [mapMode, setMapMode] = useState<MapMode>("test");
@@ -641,6 +775,21 @@ export default function Dashboard() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const geoWatchRef = useRef(0);
   const hadGpsFixForFitRef = useRef(false);
+  const [lteFollowEnabled, setLteFollowEnabled] = useState(false);
+  const [lteTrackPoints, setLteTrackPoints] = useState<VesselTrackPoint[]>([]);
+  const [aiEmergencyMsg, setAiEmergencyMsg] = useState<string | undefined>(undefined);
+  const [safetyLevel, setSafetyLevel] = useState<"안전" | "주의" | "긴급">("안전");
+  const [forecastScores, setForecastScores] = useState<SlotScore[]>([]);
+  const [groqSummary, setGroqSummary] = useState<string>("");
+
+  const [showVisionModal, setShowVisionModal] = useState(false);
+
+  // ── B2G 시연 전용 상태 ────────────────────────────────────────────────────
+  const [demoWeatherMode, setDemoWeatherMode] = useState<"normal" | "danger">("normal");
+  const [demoAlertVisible, setDemoAlertVisible] = useState(false);
+  const [demoSafeVisible, setDemoSafeVisible] = useState(false);
+  const [demoSosVisible, setDemoSosVisible] = useState(false);
+  const [demoSosBlink, setDemoSosBlink] = useState(false); // 선박 마커 깜빡임
 
   const wpIdx        = useRef(0);
   const counter      = useRef(1000 + INITIAL_SEED_COUNT + 1);
@@ -680,6 +829,19 @@ export default function Dashboard() {
     () => (mapMode === "real" ? [] : pathLatLng),
     [mapMode, pathLatLng]
   );
+
+  const ltePathLatLng = useMemo(
+    () => lteTrackPoints.map((p) => [p.lat, p.lng] as [number, number]),
+    [lteTrackPoints],
+  );
+
+  const lteRemoteFresh = useMemo(() => {
+    if (lteTrackPoints.length === 0) return false;
+    const last = lteTrackPoints[lteTrackPoints.length - 1];
+    return Date.now() - new Date(last.recorded_at).getTime() < 25 * 60 * 1000;
+  }, [lteTrackPoints]);
+
+  const vesselLteId = useMemo(() => vesselLteIdFromEnv(), []);
 
   const leafletVessel = useMemo(() => {
     if (isRealWithGps && gpsVessel) {
@@ -779,6 +941,113 @@ export default function Dashboard() {
   }, [mapMode, gpsVessel]);
 
   useEffect(() => {
+    if (!lteFollowEnabled) setLteTrackPoints([]);
+  }, [lteFollowEnabled]);
+
+  useEffect(() => {
+    if (!marineDbEnabled() || !lteFollowEnabled) return;
+    let cancelled = false;
+    const pollRaw = import.meta.env.VITE_VESSEL_LTE_POLL_MS;
+    const pollParsed =
+      pollRaw != null && String(pollRaw).trim() !== "" ? Number(pollRaw) : Number.NaN;
+    const pollMs = Number.isFinite(pollParsed)
+      ? Math.min(120_000, Math.max(5000, pollParsed))
+      : 12_000;
+
+    const tick = async () => {
+      const pts = await fetchVesselTrackPoints(vesselLteId, 500);
+      if (cancelled || pts === null) return;
+      setLteTrackPoints(pts);
+      if (mapMode !== "test" || pts.length === 0) return;
+      const last = pts[pts.length - 1];
+      const ageMs = Date.now() - new Date(last.recorded_at).getTime();
+      if (ageMs >= 25 * 60 * 1000) return;
+      const prev = pts.length >= 2 ? pts[pts.length - 2] : null;
+      let heading =
+        typeof last.heading_deg === "number" && !Number.isNaN(last.heading_deg)
+          ? last.heading_deg
+          : 0;
+      if (prev && (typeof last.heading_deg !== "number" || Number.isNaN(last.heading_deg))) {
+        heading = bearingDeg(prev.lat, prev.lng, last.lat, last.lng);
+      }
+      setVessel((v) => ({
+        ...v,
+        lat: last.lat,
+        lng: last.lng,
+        heading,
+        speed:
+          typeof last.speed_kn === "number" && !Number.isNaN(last.speed_kn) ? last.speed_kn : v.speed,
+      }));
+    };
+
+    void tick();
+    const id = window.setInterval(() => void tick(), pollMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [marineDbEnabled(), lteFollowEnabled, vesselLteId, mapMode]);
+
+  /** 위치 보고·Realtime 수신 시 DB 궤적을 다시 읽어 지도·시뮬 선박에 반영 */
+  const refreshTrackFromDb = useCallback(async () => {
+    if (!marineDbEnabled()) return;
+    const pts = await fetchVesselTrackPoints(vesselLteId, 500);
+    if (pts === null) return;
+    if (lteFollowEnabled) setLteTrackPoints(pts);
+    if (mapMode === "test" && pts.length > 0) {
+      const last = pts[pts.length - 1];
+      const prev = pts.length >= 2 ? pts[pts.length - 2] : null;
+      let heading =
+        typeof last.heading_deg === "number" && !Number.isNaN(last.heading_deg)
+          ? last.heading_deg
+          : 0;
+      if (prev && (typeof last.heading_deg !== "number" || Number.isNaN(last.heading_deg))) {
+        heading = bearingDeg(prev.lat, prev.lng, last.lat, last.lng);
+      }
+      setVessel((v) => ({
+        ...v,
+        lat: last.lat,
+        lng: last.lng,
+        heading,
+        speed:
+          typeof last.speed_kn === "number" && !Number.isNaN(last.speed_kn)
+            ? last.speed_kn
+            : v.speed,
+      }));
+    }
+  }, [vesselLteId, lteFollowEnabled, mapMode]);
+
+  useEffect(() => {
+    const applyRemoteCmd = (cmd: string) => {
+      if (cmd === "seed_start") setSeedingActive(true);
+      if (cmd === "seed_stop") setSeedingActive(false);
+      if (cmd === "emergency_return") setReturnCommandModalOpen(true);
+      if (cmd === "report_position" || cmd === "position_report") {
+        if (marineDbEnabled()) void refreshTrackFromDb();
+        else {
+          setPositionReportToast("위치 보고 신호가 수신되었습니다(로컬 시연).");
+          window.setTimeout(() => setPositionReportToast(null), 3200);
+        }
+      }
+    };
+
+    if (marineDbEnabled()) {
+      return subscribeShipCommandInserts(applyRemoteCmd);
+    }
+    if (typeof BroadcastChannel === "undefined") return;
+    const bc = new BroadcastChannel(MARINE_OPS_SIGNAL_BC);
+    const onMsg = (ev: MessageEvent<{ cmd?: string }>) => {
+      const c = ev.data?.cmd;
+      if (typeof c === "string") applyRemoteCmd(c);
+    };
+    bc.addEventListener("message", onMsg);
+    return () => {
+      bc.removeEventListener("message", onMsg);
+      bc.close();
+    };
+  }, [refreshTrackFromDb]);
+
+  useEffect(() => {
     if (!marineDbEnabled()) {
       dropsDbReady.current = true;
       return;
@@ -839,6 +1108,47 @@ export default function Dashboard() {
     };
   }, []);
 
+  /** Supabase 연동 시: DB 살포 이력 주기 갱신(아두이노·telemetry-ingest 반영, 새로고침 불필요) */
+  useEffect(() => {
+    if (!marineDbEnabled()) return;
+    let cancelled = false;
+    const pollRaw = import.meta.env.VITE_SEED_DROP_POLL_MS;
+    const pollParsed =
+      pollRaw != null && String(pollRaw).trim() !== "" ? Number(pollRaw) : Number.NaN;
+    const pollMs = Number.isFinite(pollParsed)
+      ? Math.min(120_000, Math.max(4000, pollParsed))
+      : 12_000;
+
+    const mergeDropsFromDb = async () => {
+      if (cancelled || !dropsDbReady.current) return;
+      const fromDb = await fetchSeedDropRecords(80);
+      if (cancelled || fromDb === null) return;
+      if (fromDb.length === 0) return;
+      const mapped: SeedDrop[] = fromDb.map((r) => ({
+        id: r.id,
+        label: r.label,
+        time: r.time,
+        lat: r.lat,
+        lng: r.lng,
+        status: r.status,
+        recordedAt: r.recordedAt,
+        verificationMismatch: r.verificationMismatch,
+      }));
+      setDrops(mapped);
+      const maxNum = mapped.reduce((m, d) => Math.max(m, parseInt(d.id, 10) || 0), 0);
+      counter.current = Math.max(maxNum + 1, 1006);
+      zoneCounts.current = rebuildZoneCountsFromDrops(mapped);
+    };
+
+    const t0 = window.setTimeout(() => void mergeDropsFromDb(), 2500);
+    const id = window.setInterval(() => void mergeDropsFromDb(), pollMs);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t0);
+      window.clearInterval(id);
+    };
+  }, []);
+
   // Auto-scroll log
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -863,9 +1173,10 @@ export default function Dashboard() {
     return () => clearTimeout(t);
   }, [drops]);
 
-  // Vessel movement (테스트 모드만)
+  // Vessel movement (테스트 모드만 — LTE 실선 위치 수신 시 시뮬 이동은 멈춤)
   useEffect(() => {
     if (mapMode !== "test") return;
+    if (lteFollowEnabled && lteRemoteFresh) return;
     const iv = setInterval(() => {
       const target = WAYPOINTS[wpIdx.current % WAYPOINTS.length];
       setVessel((v) => {
@@ -886,11 +1197,12 @@ export default function Dashboard() {
       });
     }, VESSEL_POSITION_TICK_MS);
     return () => clearInterval(iv);
-  }, [mapMode]);
+  }, [mapMode, lteFollowEnabled, lteRemoteFresh]);
 
-  // Auto seed drop (테스트 모드만)
+  // Auto seed drop (테스트 모드만 — LTE 선박 위치 우선 시에는 자동 살포 시연 생략)
   useEffect(() => {
     if (mapMode !== "test") return;
+    if (lteFollowEnabled && lteRemoteFresh) return;
     const iv = setInterval(() => {
       setVessel((v) => {
         counter.current += 1;
@@ -927,7 +1239,7 @@ export default function Dashboard() {
       });
     }, 16_000);
     return () => clearInterval(iv);
-  }, [mapMode]);
+  }, [mapMode, lteFollowEnabled, lteRemoteFresh]);
 
   // Weather simulation
   useEffect(() => {
@@ -944,22 +1256,131 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, []);
 
-  // Signal send handler
+  // ── B2G 시연 핸들러 ──────────────────────────────────────────────────────
+  // 데모용 슬롯 생성 헬퍼
+  const makeDemoScores = useCallback((mode: "normal" | "danger"): SlotScore[] => {
+    const base = generateMockForecast().slice(0, 8);
+    return base.map((slot, i) => {
+      // normal: 전 구간 안전 / danger: 3h 후부터 위험
+      const overrides =
+        mode === "normal"
+          ? { windSpeed: 4 + Math.random(), waveHeight: 0.4 + Math.random() * 0.1 }
+          : i < 3
+          ? { windSpeed: 6 + i * 2, waveHeight: 0.6 + i * 0.2 }
+          : { windSpeed: 16 + Math.random() * 4, waveHeight: 2.0 + Math.random() * 0.5 };
+      return scoreHourSlot({ ...slot, ...overrides });
+    });
+  }, []);
+
+  const handleDemoNormal = useCallback(() => {
+    setDemoWeatherMode("normal");
+    setDemoAlertVisible(false);
+    setDemoSosBlink(false);
+    setWeather({
+      windSpeed: 4.2,
+      windDir: 225,
+      windGust: 6.5,
+      waveHeight: 0.5,
+      visibility: 12,
+      temp: 18,
+    });
+    setForecastScores(makeDemoScores("normal"));
+    setDemoSafeVisible(true);
+    setTimeout(() => setDemoSafeVisible(false), 6000);
+  }, [makeDemoScores]);
+
+  const handleDemoDanger = useCallback(() => {
+    setDemoWeatherMode("danger");
+    setDemoSafeVisible(false);
+    setWeather({
+      windSpeed: 18.7,
+      windDir: 310,
+      windGust: 26.3,
+      waveHeight: 2.4,
+      visibility: 2.1,
+      temp: 14,
+    });
+    setForecastScores(makeDemoScores("danger"));
+    setDemoAlertVisible(true);
+  }, [makeDemoScores]);
+
+  const handleDemoSos = useCallback(() => {
+    setDemoSosVisible(true);
+    setDemoSosBlink(true);
+    // 10초 후 깜빡임 해제
+    setTimeout(() => setDemoSosBlink(false), 10000);
+  }, []);
+
+  // Signal send handler (살포·귀항·위치 — Supabase INSERT + Realtime 또는 BroadcastChannel)
   const handleSignal = useCallback(
     (cmd: string) => {
-      if (signalSending) return;
-      const id = Date.now().toString();
+      if (signalSending && cmd !== "seed_start" && cmd !== "seed_stop") return;
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const newSig: SignalEntry = { id, cmd, time: fmt(new Date()), ack: false };
-      if (marineDbEnabled()) void insertShipCommand(cmd, newSig.time);
+
+      const run = async () => {
+        if (cmd === "report_position") {
+          const lat = isRealWithGps && gpsVessel ? gpsVessel.lat : vessel.lat;
+          const lng = isRealWithGps && gpsVessel ? gpsVessel.lng : vessel.lng;
+          const heading = leafletVessel.heading;
+          const speedKn = isRealWithGps ? (gpsSpeedKn ?? vessel.speed) : vessel.speed;
+          if (marineDbEnabled()) {
+            await insertVesselTrackPoint({
+              vesselId: vesselLteIdFromEnv(),
+              lat,
+              lng,
+              speedKn,
+              headingDeg: Number.isFinite(heading) ? heading : null,
+              source: "position_report",
+            });
+            await insertShipCommand({ id, vesselId: vesselLteIdFromEnv(), cmd });
+            void refreshTrackFromDb();
+          } else if (typeof BroadcastChannel !== "undefined") {
+            new BroadcastChannel(MARINE_OPS_SIGNAL_BC).postMessage({ cmd });
+          }
+          setPositionReportToast(
+            marineDbEnabled()
+              ? "관제탑에 현재 위치가 전달되었습니다."
+              : "현재 위치를 알렸습니다(로컬 시연).",
+          );
+          window.setTimeout(() => setPositionReportToast(null), 3600);
+        } else {
+          if (marineDbEnabled()) {
+            await insertShipCommand({ id, vesselId: vesselLteIdFromEnv(), cmd });
+          } else if (typeof BroadcastChannel !== "undefined") {
+            new BroadcastChannel(MARINE_OPS_SIGNAL_BC).postMessage({ cmd });
+          }
+        }
+
+        if (cmd === "seed_start") setSeedingActive(true);
+        if (cmd === "seed_stop") setSeedingActive(false);
+        if (cmd === "emergency_return") setReturnCommandModalOpen(true);
+      };
+
+      void run();
+
       setSignals((s) => [...s.slice(-9), newSig]);
       setSignalSending(true);
-      const delay = 2200 + Math.random() * 1400;
-      setTimeout(() => {
+      const delay =
+        cmd === "seed_start" || cmd === "seed_stop"
+          ? 520
+          : cmd === "report_position"
+            ? 900
+            : 2200 + Math.random() * 1400;
+      window.setTimeout(() => {
         setSignals((s) => s.map((sig) => (sig.id === id ? { ...sig, ack: true } : sig)));
         setSignalSending(false);
       }, delay);
     },
-    [signalSending]
+    [
+      signalSending,
+      isRealWithGps,
+      gpsVessel,
+      vessel,
+      leafletVessel,
+      gpsSpeedKn,
+      refreshTrackFromDb,
+    ],
   );
 
   const handleImportCsv = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -1043,350 +1464,442 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  return (
-    <div className="flex h-screen w-full min-h-0 overflow-hidden font-sans text-[15px] leading-snug sm:text-[16px] antialiased">
-      <ManualModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
+  useEffect(() => {
+    if (viewMode === "schedule") setMapFitNonce((n) => n + 1);
+  }, [viewMode]);
 
-      {/* ══ SIDEBAR ══════════════════════════════════════════════════════════ */}
-      <aside
-        className="w-80 shrink-0 flex flex-col overflow-hidden"
-        style={{ background: "linear-gradient(180deg, #0c2748 0%, #081b34 100%)" }}
-      >
-        {/* Brand */}
-        <div className="px-5 pt-5 pb-4 border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-2.5 mb-0.5">
-            <img
-              src="/logo.svg"
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 rounded-xl shadow-md shadow-black/30"
-              alt=""
-            />
-            <div>
-              <p className="text-white font-bold text-base leading-tight tracking-tight">
+  // 현재 선박 위치 (SOS 토스트 좌표)
+  const sosVesselLat = vessel.lat !== 0 ? vessel.lat : 34.8756;
+  const sosVesselLng = vessel.lng !== 0 ? vessel.lng : 128.6812;
+
+  return (
+    <div className="flex h-svh min-h-0 w-full items-stretch overflow-hidden font-sans text-[15px] leading-snug sm:text-[16px] antialiased">
+      {/* 시연 전용 전체화면 경고 (Phase 2 — 기상 악화) */}
+      <WeatherAlertOverlay
+        visible={demoAlertVisible}
+        windSpeed={weather.windSpeed}
+        waveHeight={weather.waveHeight}
+        onClose={() => setDemoAlertVisible(false)}
+      />
+      {/* 시연 전용 SOS 수신 토스트 (Phase 4) */}
+      <SosReceivedToast
+        visible={demoSosVisible}
+        vesselId={vesselLteId || "VESSEL-001"}
+        lat={sosVesselLat}
+        lng={sosVesselLng}
+        onDismiss={() => setDemoSosVisible(false)}
+      />
+
+      <ManualModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
+      <VisionRoadmapModal isOpen={showVisionModal} onClose={() => setShowVisionModal(false)} />
+
+      {returnCommandModalOpen && (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="return-cmd-title"
+          onClick={() => setReturnCommandModalOpen(false)}
+        >
+          <div
+            className="max-w-md w-full rounded-xl border border-red-400/45 bg-[#0c1828] p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="return-cmd-title" className="text-lg font-bold text-red-300 tracking-tight">
+              귀항 명령
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-white/85">
+              관제탑에서 긴급 귀항 지령이 전달되었습니다. 즉시 회항·안전 확보 절차를 실행하세요.
+            </p>
+            <button
+              type="button"
+              className="mt-5 w-full rounded-lg bg-red-600/90 py-2.5 text-sm font-semibold text-white hover:bg-red-500 transition-colors"
+              onClick={() => setReturnCommandModalOpen(false)}
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      {positionReportToast && (
+        <div className="fixed bottom-6 left-1/2 z-[999] -translate-x-1/2 max-w-[min(90vw,24rem)] rounded-lg border border-sky-400/40 bg-[#0a1f38]/95 px-4 py-2.5 text-center text-sm text-sky-100 shadow-lg backdrop-blur-sm">
+          {positionReportToast}
+        </div>
+      )}
+
+      {/* ══ WeatherAIPanel — 숨김(로직 전용, 렌더 없음) ═════════════════════ */}
+      <div style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+        <WeatherAIPanel
+          compact
+          liveWeather={{
+            windSpeed: weather.windSpeed,
+            windDir: weather.windDir,
+            waveHeight: weather.waveHeight,
+            ptyCode: weather.windSpeed > 10 ? 1 : 0,
+            temp: weather.temp,
+          }}
+          onSafetyLevelChange={setSafetyLevel}
+          onScoresChange={setForecastScores}
+          onGroqSummaryChange={setGroqSummary}
+          onEmergencyReturn={(msg, _assessment: EmergencyAssessment) => setAiEmergencyMsg(msg)}
+        />
+      </div>
+
+      {/* ══ SIDEBAR: h-svh 고정, 상단 고정 스택 + 이력 flex-1로 남은 세로 전부 사용 ══ */}
+      <aside className="flex h-svh min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-[#0f1520]">
+        <div className="shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#141c2a] to-[#0f1520] py-3.5 pl-4 pr-3 sm:pl-5">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.svg" width={40} height={40} className="h-10 w-10 shrink-0 rounded-md" alt="" />
+            <div className="min-w-0 flex-1 py-0.5">
+              <p className="text-sm font-semibold leading-snug tracking-tight text-slate-100 sm:text-base">
                 해양 종자 살포 관제
               </p>
-              <p className="text-cyan-400/75 text-xs tracking-wide mt-0.5">
-                {VESSEL_NAME} · GNSS 살포 기록
-              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400 sm:text-xs">제3해양살포함 · GNSS 살포 기록</p>
             </div>
+          </div>
+          <div className="mt-2.5 flex gap-0.5 rounded-lg bg-black/20 p-0.5">
+            {(["map", "schedule"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setViewMode(v)}
+                className={`flex min-h-0 flex-1 items-center justify-center gap-1 rounded-md px-1 py-1.5 text-xs font-medium transition-colors sm:text-[13px] ${
+                  viewMode === v
+                    ? "bg-white/[0.09] text-slate-100 shadow-sm"
+                    : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"
+                }`}
+              >
+                {v === "map" ? <Map className="w-3.5 h-3.5 shrink-0 opacity-90" /> : <Calendar className="w-3.5 h-3.5 shrink-0 opacity-90" />}
+                <span className="truncate">{v === "map" ? "실시간 관제" : "작업 계획"}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* View navigation tabs */}
-        <div className="px-4 py-2.5 grid grid-cols-2 gap-1.5 border-b border-white/10 shrink-0">
-          <button
-            onClick={() => setViewMode("map")}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200"
-            style={viewMode === "map" ? {
-              background: "rgba(64,224,208,0.15)",
-              color: "#40E0D0",
-              border: "1px solid rgba(64,224,208,0.3)",
-            } : {
-              background: "transparent",
-              color: "rgba(255,255,255,0.4)",
-              border: "1px solid transparent",
-            }}
-          >
-            <Map className="w-3.5 h-3.5" />
-            실시간 관제
-          </button>
-          <button
-            onClick={() => setViewMode("schedule")}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200"
-            style={viewMode === "schedule" ? {
-              background: "rgba(64,224,208,0.15)",
-              color: "#40E0D0",
-              border: "1px solid rgba(64,224,208,0.3)",
-            } : {
-              background: "transparent",
-              color: "rgba(255,255,255,0.4)",
-              border: "1px solid transparent",
-            }}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            작업 계획
-          </button>
+        <div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden bg-[#0f1520]">
+        <div className="shrink-0 border-b border-white/[0.06] bg-black/[0.08] px-3 py-2">
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              {
+                icon: <Droplets className="w-3.5 h-3.5 text-teal-400/70" />,
+                label: "금일 살포",
+                val: String(DAILY_SEED_DISPLAY_BASE + drops.length - INITIAL_SEED_COUNT),
+                unit: "건",
+                color: "text-teal-200/85",
+              },
+              {
+                icon: <MapPin className="w-3.5 h-3.5 text-sky-400/65" />,
+                label: "누적 건수",
+                val: (CUMULATIVE_SEED_BASE + drops.length).toLocaleString(),
+                unit: "건",
+                color: "text-sky-200/80",
+              },
+              {
+                icon: <Ship className="w-3.5 h-3.5 text-amber-300/70" />,
+                label: "속도(노트)",
+                val: mapMode === "real" && gpsVessel && gpsSpeedKn != null ? gpsSpeedKn.toFixed(1) : vessel.speed.toFixed(1),
+                unit: "kt",
+                color: "text-amber-100/85",
+              },
+            ].map((c) => (
+              <div
+                key={c.label}
+                className="flex min-h-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-1.5 py-2"
+              >
+                <span className="shrink-0 scale-95">{c.icon}</span>
+                <span className="text-[10px] font-medium leading-tight text-slate-500 text-center">{c.label}</span>
+                <span className={`text-base font-bold font-mono leading-none tabular-nums sm:text-lg ${c.color}`}>
+                  {c.val}
+                  <span className="ml-0.5 text-[10px] font-normal text-slate-500">{c.unit}</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Live stats strip */}
-        <div className="px-5 py-3 grid grid-cols-3 gap-2 border-b border-white/10 shrink-0">
-          <StatTile
-            label="금일 살포"
-            value={String(totalToday + drops.length - INITIAL_SEED_COUNT)}
-            icon={<Droplets className="w-4 h-4" />}
-            color="text-cyan-400"
-          />
-          <StatTile
-            label="누적 건수"
-            value={(1_840 + drops.length).toLocaleString("ko-KR")}
-            icon={<MapPin className="w-4 h-4" />}
-            color="text-blue-400"
-          />
-          <StatTile
-            label="속도(노트)"
-            value={
-              mapMode === "real" && gpsVessel
-                ? gpsSpeedKn != null
-                  ? gpsSpeedKn.toFixed(1)
-                  : "—"
-                : vessel.speed.toFixed(1)
-            }
-            icon={<Ship className="w-4 h-4" />}
-            color="text-amber-400"
-          />
-        </div>
-
-        {/* ── Weather panel (compact horizontal) ── */}
-        <div className="px-4 py-2.5 border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Mini wind compass */}
-            <div className="relative w-[52px] h-[52px] shrink-0">
-              <svg viewBox="0 0 60 60" className="w-full h-full">
-                <circle cx="30" cy="30" r="28" fill="rgba(0,0,0,0.35)" stroke="rgba(64,224,208,0.22)" strokeWidth="1.5"/>
-                {["N","E","S","W"].map((d, i) => {
-                  const r = ((i * 90 - 90) * Math.PI) / 180;
-                  return (
-                    <text key={d} x={30 + 19 * Math.cos(r)} y={30 + 19 * Math.sin(r) + 3}
-                      textAnchor="middle" fill={d === "N" ? "#f87171" : "rgba(255,255,255,0.35)"}
-                      style={{ fontSize: "7px", fontWeight: "700", fontFamily: "monospace" }}>
-                      {d}
-                    </text>
-                  );
-                })}
-                <g style={{ transform: `rotate(${weather.windDir}deg)`, transformOrigin: "30px 30px", transition: "transform 2s" }}>
-                  <polygon points="30,6 32.5,22 30,18 27.5,22" fill="#40E0D0" opacity="0.95"/>
-                  <polygon points="30,54 32.5,38 30,42 27.5,38" fill="rgba(64,224,208,0.2)"/>
-                </g>
-                <circle cx="30" cy="30" r="2.5" fill="#fff" opacity="0.92"/>
-              </svg>
-            </div>
-            {/* Weather data grid */}
-            <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-1">
-              {[
-                { label: "풍속", val: `${weather.windSpeed.toFixed(1)} kt`, color: weather.windSpeed > 16 ? "#fbbf24" : "#40E0D0" },
-                { label: "풍향", val: windDirLabel(weather.windDir),        color: "rgba(255,255,255,0.65)" },
-                { label: "돌풍", val: `${weather.windGust.toFixed(1)} kt`,  color: "#fbbf24" },
-                { label: "파고", val: `${weather.waveHeight.toFixed(1)} m`, color: "#93c5fd" },
-                { label: "시정", val: `${weather.visibility.toFixed(0)} km`,color: "#6ee7b7" },
-                { label: "기온", val: `${weather.temp.toFixed(0)} °C`,      color: "#fdba74" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-baseline gap-1 text-[11px]">
-                  <span className="text-white/35 shrink-0">{item.label}</span>
-                  <span className="font-mono font-bold leading-none truncate" style={{ color: item.color }}>{item.val}</span>
+        {(() => {
+          const sc = safetyLevel;
+          const verdictText = sc === "긴급" ? "즉시 회항 권고" : sc === "주의" ? "기상 주의" : "안전 — 작업 가능";
+          const verdictColor = sc === "긴급" ? "#e8c4c4" : sc === "주의" ? "#e8ddaa" : "#9dd4be";
+          const barColor = sc === "긴급" ? "#e07070" : sc === "주의" ? "#d4923a" : "#34b8a8";
+          const wKt = mpsToKt(weather.windSpeed);
+          const gKt = mpsToKt(weather.windGust);
+          const gustStrong = weather.windGust >= 15;
+          const visOk = weather.visibility >= 8;
+          return (
+            <div className="shrink-0 border-b border-white/[0.06]">
+              <div className="flex w-full items-stretch gap-0 text-left">
+                <span className="w-1 shrink-0 rounded-none" style={{ background: barColor }} />
+                <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5">
+                  <span className="shrink-0 text-sm text-slate-400">{sc === "긴급" ? "!" : sc === "주의" ? "△" : "✓"}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                      <Wind className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
+                      AI 기상 안전
+                    </p>
+                    <p className="truncate text-sm font-medium leading-snug" style={{ color: verdictColor }}>{verdictText}</p>
+                  </div>
                 </div>
-              ))}
+              </div>
+              <div className="border-t border-white/[0.05] bg-black/[0.1] px-3 py-2">
+                <div className="flex items-start gap-2">
+                  <SidebarWindCompass windDirDeg={weather.windDir} />
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-1 text-[11px] leading-snug">
+                    <div className="space-y-0">
+                      <p className="text-slate-500">
+                        풍속 <span className="font-mono font-semibold text-slate-100">{wKt.toFixed(1)} kt</span>
+                      </p>
+                      <p className="text-slate-500">
+                        돌풍{" "}
+                        <span className={`font-mono font-semibold ${gustStrong ? "text-amber-200/85" : "text-slate-200"}`}>
+                          {gKt.toFixed(1)} kt
+                        </span>
+                      </p>
+                      <p className="text-slate-500">
+                        시정{" "}
+                        <span className={`font-mono font-semibold ${visOk ? "text-emerald-200/80" : "text-amber-100/80"}`}>
+                          {weather.visibility.toFixed(0)} km
+                        </span>
+                      </p>
+                    </div>
+                    <div className="space-y-0">
+                      <p className="text-slate-500">
+                        풍향 <span className="font-semibold text-slate-100">{windDirLabel(weather.windDir)}</span>
+                      </p>
+                      <p className="text-slate-500">
+                        파고 <span className="font-mono font-semibold text-slate-100">{weather.waveHeight.toFixed(1)} m</span>
+                      </p>
+                      <p className="text-slate-500">
+                        기온 <span className="font-mono font-semibold text-orange-100/75">{weather.temp.toFixed(0)} °C</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{VESSEL_NAME} · AI 요약 지도 상단 자막</p>
+              </div>
             </div>
-            {weather.windSpeed > 16 && (
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
-        {/* ── Vessel status (compact) ── */}
-        <div className="px-4 py-2.5 border-b border-white/10 shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-white/50 text-xs font-semibold tracking-wide">
-              {mapMode === "real" ? "내 위치 (GPS)" : "선박 위치"}
+        {/* 선박 위치 */}
+        <div className="shrink-0 border-b border-white/[0.06] bg-black/[0.06] px-3 py-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium text-slate-300 inline-flex items-center gap-1.5">
+              <Crosshair className="w-3.5 h-3.5 text-teal-400/55 shrink-0" aria-hidden />
+              선박 위치
             </span>
-            <span className="flex items-center gap-1 text-xs text-emerald-400">
-              <Navigation className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] font-medium">
-                {mapMode === "real" ? "내 위치 찾기 켜짐" : "내 위치 찾기 꺼짐 · 시뮬"}
-              </span>
+            <span className={`text-[9px] font-medium shrink-0 ${isRealWithGps ? "text-emerald-400/80" : "text-slate-500"}`}>
+              {isRealWithGps ? "GNSS 연동" : "내 위치 찾기 꺼짐 · 시뮬"}
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            {awaitingGps ? (
-              <div
-                className="rounded-md px-2 py-1.5 text-center col-span-3"
-                style={{ background: "rgba(251,191,36,0.08)" }}
-              >
-                <p className="text-[9px] text-amber-200/70 mb-0.5">상태</p>
-                <p className="text-[11px] font-mono font-bold text-amber-300 leading-none">위치 수신 대기…</p>
-              </div>
-            ) : (
+            {(
               [
                 {
-                  label: "북위",
+                  lab: "북위",
                   val: `${(isRealWithGps && gpsVessel ? gpsVessel.lat : vessel.lat).toFixed(4)}°`,
+                  icon: <ArrowUp className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
                 {
-                  label: "동경",
+                  lab: "동경",
                   val: `${(isRealWithGps && gpsVessel ? gpsVessel.lng : vessel.lng).toFixed(4)}°`,
+                  icon: <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
                 {
-                  label: "방위",
-                  val: `${(((isRealWithGps && gpsVessel ? gpsVessel.heading : vessel.heading) % 360) + 360) % 360 | 0}°`,
+                  lab: "방위",
+                  val: `${Math.round(leafletVessel.heading)}°`,
+                  icon: <Compass className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
-              ].map((r) => (
-                <div
-                  key={r.label}
-                  className="rounded-md px-2 py-1.5 text-center"
-                  style={{ background: "rgba(255,255,255,0.04)" }}
-                >
-                  <p className="text-[9px] text-white/35 mb-0.5">{r.label}</p>
-                  <p className="text-[11px] font-mono font-bold text-cyan-300 leading-none">{r.val}</p>
-                </div>
-              ))
-            )}
+              ] as const
+            ).map((c) => (
+              <div key={c.lab} className="flex flex-col items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] px-1 py-1.5 text-center">
+                <p className="mb-0 inline-flex w-full items-center justify-center gap-0.5 text-[10px] text-slate-500">
+                  {c.icon}
+                  <span>{c.lab}</span>
+                </p>
+                <p className="text-xs font-mono font-medium leading-tight text-slate-200 tabular-nums">{c.val}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* ── Signal panel ── */}
-        <SignalPanel signals={signals} onSend={handleSignal} isSending={signalSending} />
-
-        {/* Log header */}
-        <div className="px-5 pt-3 pb-1.5 flex items-center justify-between shrink-0">
-          <span className="text-white/55 text-xs font-semibold tracking-wide flex items-center gap-2">
-            <Activity className="w-4 h-4 shrink-0" />
-            종자 살포 이력
-          </span>
-          <span className="text-white/40 text-xs text-right">
-            {filterStart || filterEnd ? (
-              <>
-                조회 {filteredDrops.length.toLocaleString("ko-KR")}건
-                <span className="text-white/20"> · 전체 {drops.length.toLocaleString("ko-KR")}건</span>
-              </>
-            ) : (
-              <>총 {drops.length.toLocaleString("ko-KR")}건</>
+        <div className="shrink-0 border-b border-white/[0.06]">
+          <div className="flex flex-wrap items-center gap-1 px-3 py-1">
+            <Radio className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+            <span className="text-[11px] font-medium tracking-tight text-slate-300">선박 신호 송신</span>
+            {seedingActive && (
+              <span className="seeding-badge-breathe text-[9px] font-semibold uppercase tracking-wide rounded border border-teal-400/25 bg-teal-500/12 px-1.5 py-0.5 text-teal-100/90">
+                살포 중
+              </span>
             )}
-          </span>
-        </div>
-
-        {/* Log column headers */}
-        <div className="px-3 pb-1.5 shrink-0 grid grid-cols-4 gap-1 text-[10px] text-white/35 font-semibold tracking-wide">
-          <span>번호</span>
-          <span>시각</span>
-          <span className="text-right">위도</span>
-          <span className="text-right">경도</span>
-        </div>
-
-        {/* Log list */}
-        <div
-          ref={logRef}
-          className="flex-1 overflow-y-auto px-3 pb-2 space-y-0.5 scroll-smooth min-h-0"
-          style={{ scrollbarWidth: "thin", scrollbarColor: "#1e3a5f transparent" }}
-        >
-          {filteredDrops.length === 0 ? (
-            <p className="text-center text-white/40 text-sm px-2 py-6">
-              선택한 기간에 조회된 이력이 없습니다.
-            </p>
-          ) : (
-            filteredDrops.map((d) => {
-              const isNew = d.id === latestId;
-              const col = dropVisualColors(d);
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 border-t border-white/[0.05] bg-black/[0.08] px-3 py-2">
+            {(
+              [
+                {
+                  label: "귀항 명령",
+                  cmd: "emergency_return",
+                  tip: "긴급 회항 명령 전송 + 선박 사이렌",
+                  icon: <Undo2 className="w-3 h-3 shrink-0" aria-hidden />,
+                },
+                {
+                  label: "살포 시작",
+                  cmd: "seed_start",
+                  tip: "살포 시작 지령(시연)",
+                  icon: <Play className="w-3 h-3 shrink-0" aria-hidden />,
+                },
+                {
+                  label: "살포 중지",
+                  cmd: "seed_stop",
+                  tip: "살포 중지 지령(시연)",
+                  icon: <Square className="w-2.5 h-2.5 shrink-0" aria-hidden />,
+                },
+                {
+                  label: "위치 보고",
+                  cmd: "report_position",
+                  tip: "선박 현재 위치 보고 요청",
+                  icon: <MapPin className="w-3 h-3 shrink-0" aria-hidden />,
+                },
+              ] as const
+            ).map((b) => {
+              const signalMuted: Record<
+                (typeof b)["cmd"],
+                { fill: string; border: string; ink: string }
+              > = {
+                emergency_return: {
+                  fill: "rgba(72, 28, 28, 0.28)",
+                  border: "rgba(220, 120, 120, 0.22)",
+                  ink: "rgba(252, 220, 220, 0.82)",
+                },
+                seed_start: {
+                  fill: "rgba(18, 72, 68, 0.26)",
+                  border: "rgba(56, 178, 165, 0.2)",
+                  ink: "rgba(180, 240, 228, 0.82)",
+                },
+                seed_stop: {
+                  fill: "rgba(72, 48, 22, 0.26)",
+                  border: "rgba(214, 160, 90, 0.2)",
+                  ink: "rgba(254, 228, 200, 0.82)",
+                },
+                report_position: {
+                  fill: "rgba(28, 52, 78, 0.28)",
+                  border: "rgba(120, 170, 210, 0.22)",
+                  ink: "rgba(200, 230, 252, 0.82)",
+                },
+              };
+              const m = signalMuted[b.cmd];
               return (
-                <div
-                  key={d.id}
-                  className={`grid grid-cols-4 gap-1 px-2 py-1.5 rounded-md text-[11px] font-mono transition-all duration-300 border border-transparent hover:bg-white/5 ${
-                    isNew ? "shadow-[0_0_14px_rgba(255,255,255,0.10)] ring-1 ring-white/20" : ""
-                  }`}
-                  style={{
-                    background: "rgba(255,255,255,0.035)",
-                    borderLeft: `4px solid ${col.fill}`,
-                  }}
-                >
-                  {/* 구역 라벨 배지 */}
-                  <span className="font-black leading-none flex items-center">
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[10px] font-black"
-                      style={{
-                        background: `${col.fill}30`,
-                        color: col.stroke,
-                        border: `1px solid ${col.fill}60`,
-                      }}
-                    >
-                      {d.label}
-                    </span>
-                  </span>
-                  <span className="font-semibold truncate" style={{ color: col.stroke }}>
-                    {d.time}
-                  </span>
-                  <span className="text-right text-white/60">{d.lat.toFixed(4)}</span>
-                  <span className="text-right text-white/60">{d.lng.toFixed(4)}</span>
-                </div>
+              <button
+                key={b.cmd}
+                type="button"
+                title={b.tip}
+                onClick={() => handleSignal(b.cmd)}
+                disabled={signalSending && b.cmd !== "seed_start" && b.cmd !== "seed_stop"}
+                className={`flex min-h-[2.5rem] items-center justify-center gap-1 rounded-md border border-solid px-1.5 py-1.5 transition-[filter,transform] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/15 active:scale-[0.98] disabled:opacity-40 ${
+                  b.cmd === "seed_start" && seedingActive ? "ring-1 ring-teal-400/25 shadow-none" : ""
+                }`}
+                style={{
+                  borderColor: m.border,
+                  background: m.fill,
+                }}
+              >
+                <span className="opacity-85" style={{ color: m.ink }}>
+                  {b.icon}
+                </span>
+                <span className="text-xs font-medium leading-tight" style={{ color: m.ink }}>
+                  {b.label}
+                </span>
+              </button>
               );
-            })
-          )}
+            })}
+          </div>
         </div>
 
-        {/* Date filter + export — compact single row */}
-        <div className="px-3 py-2.5 border-t border-white/10 shrink-0">
-          <input
-            ref={fileImportRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={handleImportCsv}
-            aria-hidden
-          />
-          <div className="flex gap-1.5 items-center flex-wrap">
-            <input
-              type="date"
-              value={filterStart}
-              onChange={(e) => setFilterStart(e.target.value)}
-              className="flex-1 min-w-0 rounded-md border border-white/12 bg-white/5 px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500/50 [color-scheme:dark]"
-              aria-label="시작일"
-            />
-            <span className="text-white/25 text-xs shrink-0">~</span>
-            <input
-              type="date"
-              value={filterEnd}
-              onChange={(e) => setFilterEnd(e.target.value)}
-              className="flex-1 min-w-0 rounded-md border border-white/12 bg-white/5 px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500/50 [color-scheme:dark]"
-              aria-label="종료일"
-            />
-            <button
-              type="button"
-              onClick={() => fileImportRef.current?.click()}
-              title="CSV 파일에서 이력 불러오기(검증)"
-              className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-semibold text-white/90 border border-white/20 bg-white/5 hover:bg-white/10"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              불러오기
-            </button>
-            <button
-              type="button"
-              onClick={() => exportCSV(filteredDrops)}
-              title={`CSV 저장 (${filteredDrops.length}건)`}
-              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold text-white transition-all hover:scale-[1.04] active:scale-95"
-              style={{
-                background: "linear-gradient(135deg, #1FB5A8 0%, #0e7490 100%)",
-                boxShadow: "0 2px 8px rgba(31,181,168,0.3)",
-              }}
-            >
-              <Download className="w-3.5 h-3.5" />
-              CSV
-            </button>
-          </div>
-          {(filterStart || filterEnd) && (
-            <p className="text-[10px] text-white/30 mt-1 text-center">
-              조회 {filteredDrops.length}건 · 전체 {drops.length}건
+        <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05]">
+          <div className="shrink-0 px-3 py-2">
+            <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
+              <Activity className="w-3 h-3 shrink-0 opacity-80" /> 종자 살포 이력
             </p>
-          )}
+            <p className="text-[11px] text-slate-200 truncate leading-tight">
+              총 {drops.length}건
+              {filteredDrops.length > 0 && (
+                <> · 최근 {filteredDrops[filteredDrops.length - 1]?.label} {filteredDrops[filteredDrops.length - 1]?.time}</>
+              )}
+            </p>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05] bg-black/[0.08] px-3 pb-2 pt-2">
+            <div className="grid shrink-0 grid-cols-4 gap-1 pb-1 pl-[11px] pr-2 text-[10px] font-medium text-slate-500">
+              <span>번호</span><span>시각</span><span className="text-right">위도</span><span className="text-right">경도</span>
+            </div>
+            <div ref={logRef} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain">
+              {filteredDrops.length === 0 ? (
+                <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">조회된 이력이 없습니다</p>
+              ) : (
+                [...filteredDrops].reverse().map((d) => {
+                  const isNew = d.id === latestId;
+                  const col = dropVisualColors(d);
+                  return (
+                    <div key={d.id}
+                      className={`grid grid-cols-4 gap-1 rounded-md border border-white/[0.06] bg-white/[0.025] px-1.5 py-1.5 font-mono text-[11px] leading-snug ${isNew ? "ring-1 ring-white/10" : ""}`}
+                      style={{ borderLeftWidth: 3, borderLeftColor: col.fill }}>
+                      <span className="flex min-w-0 items-center">
+                        <span className="max-w-full truncate rounded border border-white/[0.08] bg-black/20 px-1 py-0.5 text-[11px] font-medium text-slate-200">
+                          {d.label}
+                        </span>
+                      </span>
+                      <span className="font-medium truncate text-slate-300">{d.time}</span>
+                      <span className="text-right text-slate-400">{d.lat.toFixed(3)}</span>
+                      <span className="text-right text-slate-400">{d.lng.toFixed(3)}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-2 shrink-0 space-y-1.5 border-t border-white/[0.05] pt-2">
+              <input ref={fileImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} aria-hidden />
+              <div className="flex gap-1.5 items-center">
+                <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)}
+                  className="flex-1 min-w-0 rounded-md border border-white/[0.08] bg-black/25 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-teal-500/30 [color-scheme:dark]" aria-label="시작일" />
+                <span className="text-slate-500 text-xs shrink-0">~</span>
+                <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)}
+                  className="flex-1 min-w-0 rounded-md border border-white/[0.08] bg-black/25 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-teal-500/30 [color-scheme:dark]" aria-label="종료일" />
+                <button
+                  type="button"
+                  onClick={() => fileImportRef.current?.click()}
+                  title="CSV 불러오기"
+                  className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-12 py-1 rounded-md text-slate-300 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="text-[9px] font-medium leading-none">불러오기</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportCSV(filteredDrops)}
+                  title={`CSV 저장 (${filteredDrops.length}건)`}
+                  className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-12 py-1 rounded-md text-slate-900 border border-teal-400/35 bg-teal-500/75 hover:bg-teal-500/90 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="text-[9px] font-bold leading-none">CSV</span>
+                </button>
+              </div>
+              {(filterStart || filterEnd) && (
+                <p className="text-[10px] text-slate-500 text-center">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         </div>
       </aside>
 
       {/* ══ MAP AREA / WORK PLAN ════════════════════════════════════════════ */}
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#031928]">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#031928]">
         {/* Topbar */}
         <header
-          className="min-h-[3.25rem] shrink-0 flex items-center gap-3 px-4 sm:px-5 py-2 border-b border-white/10"
-          style={{
-            background: "linear-gradient(90deg, rgba(7,28,52,0.95) 0%, rgba(4,18,36,0.98) 100%)",
-          }}
+          className="min-h-[3.25rem] shrink-0 flex items-center gap-3 px-4 sm:px-5 py-2 border-b border-white/[0.06] bg-[#0f1520]"
         >
-          {/* Live indicator */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div
-              className="h-2.5 w-2.5 shrink-0 rounded-full animate-pulse"
-              style={{ background: "#40E0D0", boxShadow: "0 0 8px #40E0D0" }}
-            />
-            <span className="text-white/65 text-sm tracking-wide font-medium truncate">
-              살포 구역 기록 · 남해 제3구역{LOCAL_RECORDING_ONLY ? " · 오프라인" : ""}
-            </span>
-          </div>
+          <div className="min-w-0 flex-1" aria-hidden />
 
           {/* Wind badge */}
           <div
@@ -1431,10 +1944,47 @@ export default function Dashboard() {
           )}
         </header>
 
+        <AiTicker
+          safetyLevel={safetyLevel}
+          groqSummary={groqSummary}
+          aiMsg={aiEmergencyMsg ?? ""}
+          windSpeed={weather.windSpeed}
+          waveHeight={weather.waveHeight}
+          temp={weather.temp}
+        />
+
         {/* Map container / Work plan view */}
         {viewMode === "schedule" ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <WorkPlanView weather={weather} />
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <div
+              className="w-[min(100%,20rem)] sm:w-[22rem] shrink-0 border-r border-white/10 flex flex-col min-h-0 overflow-hidden"
+              style={{ background: "rgba(6,15,30,0.97)" }}
+            >
+              <WorkPlanView weather={weather} variant="compact" />
+            </div>
+            <div className="relative flex-1 min-h-0 min-w-0">
+              <div className="absolute inset-0 z-0 min-h-0 min-w-0">
+                <MarineLeafletMap
+                  basemap="voyager"
+                  center={[BASE_LAT, BASE_LNG]}
+                  zoomRail={1}
+                  fitNonce={mapFitNonce}
+                  drops={[]}
+                  vessel={leafletVessel}
+                  pathLatLng={[]}
+                  ltePathLatLng={[]}
+                  vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
+                  panMapToVesselOnMove={false}
+                  fitToVesselOnly={false}
+                  hideVesselMarker={awaitingGps}
+                  maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
+                  disableScrollWheelZoom
+                  offlineNoTiles={OFFLINE_MAP_NO_TILES}
+                  planMarkers={ZONE1_PLAN_MARKERS}
+                  scheduleFocusFit
+                />
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -1442,6 +1992,26 @@ export default function Dashboard() {
           ref={mapContainerRef}
           className={`flex-1 min-h-0 min-w-0 relative overflow-hidden ${viewMode === "schedule" ? "hidden" : ""}`}
         >
+          {/* SOS 수신 시 지도 테두리 붉은 깜빡임 (Phase 4) */}
+          {demoSosBlink && (
+            <div
+              className="pointer-events-none absolute inset-0 z-30 rounded-sm"
+              style={{
+                border: "5px solid rgba(239,68,68,0.9)",
+                boxShadow: "inset 0 0 60px rgba(239,68,68,0.5)",
+                animation: "sosBlink 0.7s ease-in-out infinite alternate",
+              }}
+            >
+              <style>{`@keyframes sosBlink { from { opacity:1; } to { opacity:0.25; } }`}</style>
+              <div
+                className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black text-white"
+                style={{ background: "rgba(200,0,0,0.85)", letterSpacing: "0.05em" }}
+              >
+                🔴 SOS 신호 수신 중 — 선박 위치 특정 완료
+              </div>
+            </div>
+          )}
+
           <div className="absolute inset-0 z-0 min-h-0 min-w-0">
             <MarineLeafletMap
               basemap="voyager"
@@ -1451,8 +2021,9 @@ export default function Dashboard() {
               drops={leafletDrops}
               vessel={leafletVessel}
               pathLatLng={leafletPathLatLng}
+              ltePathLatLng={lteFollowEnabled ? ltePathLatLng : []}
               vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
-              panMapToVesselOnMove={isRealWithGps}
+              panMapToVesselOnMove={isRealWithGps || (lteFollowEnabled && lteRemoteFresh && mapMode === "test")}
               fitToVesselOnly={isRealWithGps}
               hideVesselMarker={awaitingGps}
               maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
@@ -1461,7 +2032,15 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Clock overlay */}
+          {/* ── AI 기상 예측 타임라인 트래커 (지도 하단 오버레이) ── */}
+          {forecastScores.length > 0 && (
+            <WeatherTimelineTracker
+              scores={forecastScores}
+              safetyLevel={safetyLevel}
+            />
+          )}
+
+          {/* Clock overlay — 헤더/사이드바와 동일 톤, 시·분·초 구분 */}
           <div
             className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2"
             role="status"
@@ -1470,11 +2049,58 @@ export default function Dashboard() {
           >
             <time
               dateTime={clock.toISOString()}
-              className="block rounded-xl border border-white/15 bg-[#041c2e]/75 px-4 py-2 backdrop-blur-md tabular-nums text-xl sm:text-2xl font-medium text-white/90 font-mono tracking-[0.02em] shadow-lg shadow-black/25"
+              className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.08] bg-[#0f1520]/92 px-4 py-2 sm:px-5 sm:py-2.5 font-mono tabular-nums shadow-lg shadow-black/30 ring-1 ring-inset ring-white/[0.04] backdrop-blur-md"
               suppressHydrationWarning
             >
-              {clock.toLocaleTimeString("ko-KR", { hour12: false })}
+              {(() => {
+                const p = (n: number) => String(n).padStart(2, "0");
+                const hh = p(clock.getHours());
+                const mm = p(clock.getMinutes());
+                const ss = p(clock.getSeconds());
+                return (
+                  <>
+                    <span className="text-[1.375rem] font-semibold leading-none tracking-wide text-slate-100 sm:text-2xl drop-shadow-sm">
+                      {hh}
+                    </span>
+                    <span className="pb-px text-lg font-light text-slate-500 sm:text-xl" aria-hidden>
+                      :
+                    </span>
+                    <span className="text-[1.375rem] font-semibold leading-none tracking-wide text-slate-100 sm:text-2xl drop-shadow-sm">
+                      {mm}
+                    </span>
+                    <span className="pb-px text-lg font-light text-slate-500 sm:text-xl" aria-hidden>
+                      :
+                    </span>
+                    <span className="text-lg font-medium leading-none text-slate-400 sm:text-[1.35rem]">{ss}</span>
+                  </>
+                );
+              })()}
             </time>
+          </div>
+
+          {/* 우상단 버튼 그룹: 시연 3개 + 고도화 — 한 줄로 통합 */}
+          <div className="absolute right-3 top-3 z-20 flex gap-0.5 items-center"
+            style={{ background: "rgba(0,0,0,0.5)", borderRadius: 10, padding: "3px 5px", backdropFilter: "blur(8px)" }}>
+            {[
+              { icon: "✅", fn: handleDemoNormal, tip: "Phase 1: 기상 정상" },
+              { icon: "⚡", fn: handleDemoDanger, tip: "Phase 2: 기상 악화" },
+              { icon: "🔴", fn: handleDemoSos,    tip: "Phase 4: SOS 수신" },
+            ].map((b) => (
+              <button key={b.tip} onClick={b.fn} title={b.tip}
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                style={{ lineHeight: 1, fontSize: 14 }}>
+                {b.icon}
+              </button>
+            ))}
+            <div className="w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,0.15)" }} />
+            {/* 고도화 모달 버튼 */}
+            <button
+              onClick={() => setShowVisionModal(true)}
+              title="해양 무인화 고도화 계획 (관공서 제안서용)"
+              className="flex items-center gap-1 px-2 h-6 rounded text-[10px] font-black transition-all hover:brightness-125"
+              style={{ background: "rgba(99,102,241,0.35)", border: "1px solid rgba(99,102,241,0.6)", color: "#c7d2fe" }}>
+              🏛️ <span style={{ letterSpacing: "0.02em" }}>고도화</span>
+            </button>
           </div>
 
           {/* Floating controls */}
@@ -1558,6 +2184,36 @@ export default function Dashboard() {
             {gpsError ? (
               <p className="max-w-[14rem] rounded-md border border-amber-400/40 bg-amber-950/90 px-2 py-1 text-[10px] text-amber-100 shadow-md">
                 {gpsError}
+              </p>
+            ) : null}
+            {marineDbEnabled() ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={lteFollowEnabled}
+                title="Supabase에 쌓인 선박 궤적을 주기적으로 불러와 주황선·선박 아이콘에 반영합니다"
+                onClick={() => {
+                  setLteFollowEnabled((v) => !v);
+                  setMapFitNonce((n) => n + 1);
+                }}
+                className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold tracking-tight shadow-lg backdrop-blur-sm transition-colors ${
+                  lteFollowEnabled
+                    ? "border-orange-300/90 bg-orange-400/25 text-orange-50"
+                    : "border-white/25 bg-[#041c2e]/90 text-white/90 hover:bg-white/10"
+                }`}
+              >
+                <Ship className="h-[18px] w-[18px] shrink-0 stroke-[2]" aria-hidden />
+                <span className="leading-none">해상 기기(LTE) 궤적</span>
+              </button>
+            ) : null}
+            {lteFollowEnabled && marineDbEnabled() && lteTrackPoints.length === 0 ? (
+              <p className="max-w-[14rem] rounded-md border border-white/15 bg-[#041c2e]/90 px-2 py-1 text-[10px] text-white/70 shadow-md">
+                아직 궤적이 없습니다. Edge `vessel-track-ingest`로 전송하거나 SQL로 005를 적용했는지 확인하세요.
+              </p>
+            ) : null}
+            {lteFollowEnabled && lteTrackPoints.length > 0 && !lteRemoteFresh ? (
+              <p className="max-w-[14rem] rounded-md border border-amber-400/35 bg-[#041c2e]/90 px-2 py-1 text-[10px] text-amber-100/90 shadow-md">
+                최근 LTE 위치가 25분 넘게 없습니다. 단말·망 상태를 확인하세요.
               </p>
             ) : null}
           </div>
@@ -1668,15 +2324,84 @@ function FloatBtn({
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="rounded-lg px-2.5 py-2 text-xs"
+      className="rounded-lg px-3 py-2.5 text-xs border border-slate-600/90"
       style={{
-        background: "rgba(9,30,56,0.88)",
-        backdropFilter: "blur(8px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        background: "rgba(15,23,42,0.94)",
+        backdropFilter: "blur(10px)",
+        boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
       }}
     >
-      <p className="mb-0.5 text-[10px] font-medium tracking-wide text-white/45">{label}</p>
-      <p className="text-[11px] font-semibold leading-snug text-cyan-300/95">{value}</p>
+      <p className="mb-1 text-[11px] font-medium tracking-wide text-slate-400">{label}</p>
+      <p className="text-[12px] font-semibold leading-snug text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+// ─── AI 자막 Ticker ──────────────────────────────────────────────────────────
+
+function AiTicker({
+  safetyLevel, groqSummary, aiMsg, windSpeed, waveHeight, temp,
+}: {
+  safetyLevel: string;
+  groqSummary: string;
+  aiMsg: string;
+  windSpeed: number;
+  waveHeight: number;
+  temp: number;
+}) {
+  const color = safetyLevel === "긴급" ? "#fca5a5" : safetyLevel === "주의" ? "#fcd34d" : "#6ee7b7";
+  const base = `${safetyLevel === "긴급" ? "🚨 즉시 회항 권고" : safetyLevel === "주의" ? "⚠️ 기상 주의" : "✅ 안전 운항"} · 풍속 ${windSpeed.toFixed(1)}m/s · 파고 ${waveHeight.toFixed(1)}m · 기온 ${temp.toFixed(0)}°C`;
+  const g = groqSummary.trim();
+  const a = aiMsg.trim();
+  const extra = g ? ` · ⚡ ${g}` : a ? ` · ${a}` : "";
+  /** 한 줄: 오른쪽 밖(translateX(100%))에서 들어와 왼쪽으로 전부 빠질 때까지(-100%) 이동 후 정지 */
+  const segment = `${VESSEL_NAME} · ${base}${extra}`;
+  const scrollSec = 22;
+  const pauseSec = 30;
+  const cycleSec = scrollSec + pauseSec;
+  const scrollEndPct = (scrollSec / cycleSec) * 100;
+
+  return (
+    <div
+      className="w-full min-w-0 shrink-0 overflow-hidden border-b border-white/10"
+      style={{
+        background: `${color}14`,
+        borderTop: `1px solid ${color}33`,
+      }}
+      title={segment}
+    >
+      <style>{`
+        @keyframes aiTickerCycle {
+          0% { transform: translateX(100%); }
+          ${scrollEndPct.toFixed(3)}% { transform: translateX(-100%); }
+          100% { transform: translateX(-100%); }
+        }
+        .ai-marquee-track {
+          display: inline-block;
+          max-width: none;
+          white-space: nowrap;
+          padding-left: 1rem;
+          padding-right: 1rem;
+          animation: aiTickerCycle ${cycleSec}s linear infinite;
+          will-change: transform;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ai-marquee-track {
+            animation: none;
+            transform: none;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+          }
+        }
+      `}</style>
+      <div className="relative w-full min-w-0 py-1.5">
+        <div className="ai-marquee-track text-[11px] font-semibold sm:text-[13px]" role="presentation" style={{ color }}>
+          {segment}
+        </div>
+      </div>
     </div>
   );
 }

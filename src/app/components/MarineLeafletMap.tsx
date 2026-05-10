@@ -68,6 +68,12 @@ type Props = {
   maxBounds?: LatLngBoundsExpression | null;
   /** true면 XYZ 타일(인터넷) 요청 없음 — 장비 오프라인 기록 모드 */
   offlineNoTiles?: boolean;
+  /** 해상 기기(LTE)로 수집한 선박 궤적 — 시뮬 항적과 구분해 주황색으로 표시 */
+  ltePathLatLng?: [number, number][];
+  /** 작업 계획 등 — 살포 점과 별도의 계획 후보 마커(예: 제1구역 격자) */
+  planMarkers?: ReadonlyArray<{ lat: number; lng: number; label: string }>;
+  /** true면 맞춤 줌에 살포·항적·LTE 궤적을 넣지 않고 선박+planMarkers만 사용 */
+  scheduleFocusFit?: boolean;
 };
 
 function tileUrl(basemap: MarineBasemap): string {
@@ -235,27 +241,58 @@ export function MarineLeafletMap({
   disableScrollWheelZoom,
   maxBounds = OPS_AREA_MAX_BOUNDS,
   offlineNoTiles = false,
+  ltePathLatLng = [],
+  planMarkers = [],
+  scheduleFocusFit = false,
 }: Props) {
   const fitPoints = useMemo(() => {
+    const lte = ltePathLatLng ?? [];
+    const plans = planMarkers ?? [];
+    if (scheduleFocusFit && plans.length > 0) {
+      const raw: L.LatLngExpression[] = [
+        [vessel.lat, vessel.lng] as L.LatLngExpression,
+        ...plans.map((p) => [p.lat, p.lng] as L.LatLngExpression),
+      ];
+      const k = filterPointsNearKorea(raw);
+      return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
+    }
     if (hideVesselMarker && !fitToVesselOnly) {
       const raw: L.LatLngExpression[] = [
         ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
         ...pathLatLng,
+        ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
       ];
       const k = filterPointsNearKorea(raw);
       return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
     }
     if (fitToVesselOnly) {
-      return [[vessel.lat, vessel.lng] as L.LatLngExpression];
+      const raw: L.LatLngExpression[] = [
+        [vessel.lat, vessel.lng] as L.LatLngExpression,
+        ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
+      ];
+      const k = filterPointsNearKorea(raw);
+      return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
     }
     const raw: L.LatLngExpression[] = [
       [vessel.lat, vessel.lng],
       ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
       ...pathLatLng,
+      ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
+      ...(planMarkers ?? []).map((p) => [p.lat, p.lng] as L.LatLngExpression),
     ];
     const k = filterPointsNearKorea(raw);
     return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
-  }, [vessel.lat, vessel.lng, drops, pathLatLng, fitToVesselOnly, hideVesselMarker]);
+  }, [
+    vessel.lat,
+    vessel.lng,
+    drops,
+    pathLatLng,
+    fitToVesselOnly,
+    hideVesselMarker,
+    ltePathLatLng,
+    planMarkers,
+    scheduleFocusFit,
+  ]);
 
   const boundsProps =
     maxBounds != null
@@ -294,6 +331,17 @@ export function MarineLeafletMap({
         />
       ) : null}
 
+      {ltePathLatLng.length > 1 ? (
+        <Polyline
+          positions={ltePathLatLng.map(([la, ln]) => L.latLng(la, ln))}
+          pathOptions={{
+            color: "#fb923c",
+            weight: 3,
+            opacity: 0.88,
+          }}
+        />
+      ) : null}
+
       {drops.map((d) => (
         <CircleMarker
           key={d.id}
@@ -314,6 +362,30 @@ export function MarineLeafletMap({
             className="marine-drop-tooltip !rounded !border !border-white/20 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-mono !font-bold !text-white/90 !shadow-lg"
           >
             {d.label}
+          </Tooltip>
+        </CircleMarker>
+      ))}
+
+      {(planMarkers ?? []).map((p, i) => (
+        <CircleMarker
+          key={`plan-${p.label}-${i}`}
+          center={L.latLng(p.lat, p.lng)}
+          radius={10}
+          pathOptions={{
+            color: "#38bdf8",
+            fillColor: "#0891b2",
+            fillOpacity: 0.42,
+            weight: 2,
+          }}
+        >
+          <Tooltip
+            permanent
+            direction="top"
+            offset={[0, -6]}
+            opacity={1}
+            className="marine-drop-tooltip !rounded !border !border-cyan-400/40 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-bold !text-cyan-100 !shadow-lg"
+          >
+            {p.label}
           </Tooltip>
         </CircleMarker>
       ))}
