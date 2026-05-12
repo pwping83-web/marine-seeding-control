@@ -675,9 +675,12 @@ export default function MobileDeckView() {
                     const p = parseTestStyleDropLabel(d.label);
                     if (p) {
                       return (
-                        <p className="truncate font-mono text-[10px] font-bold leading-snug text-teal-100">
-                          {p.displayLine}
-                        </p>
+                        <>
+                          <p className="truncate font-mono text-[10px] font-bold leading-snug text-teal-100">
+                            {p.displayLine}
+                          </p>
+                          <p className="truncate text-[9px] text-slate-400">{d.time}</p>
+                        </>
                       );
                     }
                     return (
@@ -691,7 +694,7 @@ export default function MobileDeckView() {
                 <button
                   type="button"
                   onClick={() => void removeSessionDrop(d)}
-                  title="이 투하만 삭제"
+                  title="이 건만 삭제"
                   aria-label={`${d.label} 삭제`}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-500/35 text-rose-200/90 transition-colors hover:bg-rose-950/50 hover:text-rose-100"
                 >
@@ -788,7 +791,7 @@ export default function MobileDeckView() {
             disabled={dropBusy || !seedingActive || !pos}
             title={
               !pos
-                ? "현재 위치가 잡혀야 투하 지점을 찍을 수 있습니다."
+                ? "현재 위치가 잡혀야 기록 지점을 찍을 수 있습니다."
                 : !seedingActive
                   ? "살포 중일 때만 센서 트리거를 시뮬할 수 있습니다."
                   : "현재 GPS 위치에 살포 1건을 기록합니다(센서 1회 트리거와 동일)."
@@ -801,7 +804,7 @@ export default function MobileDeckView() {
               <Droplets className="h-4 w-4 drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" strokeWidth={2.25} aria-hidden />
             </span>
             <div className="min-w-0 flex flex-col items-start gap-0.5 text-left">
-              <span className="text-[12px] font-black tracking-tight">투하 (센서 시뮬)</span>
+              <span className="text-[12px] font-black tracking-tight">센서 시뮬 1건</span>
               <span className="text-[8px] font-semibold text-emerald-300/55">현재 위치에 1건 · 지도에 표시</span>
             </div>
           </button>

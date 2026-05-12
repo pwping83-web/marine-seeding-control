@@ -2397,7 +2397,7 @@ export default function Dashboard() {
             <span
               role="checkbox"
               aria-checked={seedingActive}
-              aria-label="투하(종자 방류)"
+              aria-label="종자 방류(살포 중)"
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] font-black leading-none transition-colors ${
                 seedingActive
                   ? "border-emerald-500/70 bg-emerald-600/80 text-white shadow-[0_0_0_1px_rgba(16,185,129,0.2)]"
@@ -2407,7 +2407,7 @@ export default function Dashboard() {
               ✓
             </span>
             <span className={`text-[11px] font-medium ${seedingActive ? "text-emerald-200/90" : "text-slate-500"}`}>
-              투하 (종자 방류)
+              종자 방류 (살포 중)
             </span>
           </div>
         </div>
@@ -2512,13 +2512,13 @@ export default function Dashboard() {
                   월·일별 지도
                 </p>
                 <p className="mb-1.5 text-[9px] leading-snug text-slate-400">
-                  월을 누르면 그달 투하만 지도에 남고, 같은 달이면 날짜를 골라 하루만 볼 수 있습니다.
+                  월을 누르면 그달 살포 점만 지도에 남고, 같은 달이면 날짜를 골라 하루만 볼 수 있습니다.
                 </p>
                 <div className="mb-1.5 flex flex-wrap gap-1">
                   <button
                     type="button"
                     onClick={clearDropDateFilter}
-                    title="기간 제한 없이 전체 투하 표시"
+                    title="기간 제한 없이 전체 살포 점 표시"
                     className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
                       !filterStart && !filterEnd
                         ? "border-teal-400/55 bg-teal-500/25 text-teal-50"
@@ -2534,7 +2534,7 @@ export default function Dashboard() {
                         key={s.ym}
                         type="button"
                         onClick={() => applyDropMonthFilter(s.year, s.month)}
-                        title={`${s.year}년 ${s.month}월 투하 ${s.count}건만 지도·목록에 표시`}
+                        title={`${s.year}년 ${s.month}월 살포 ${s.count}건만 지도·목록에 표시`}
                         className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
                           active
                             ? "border-cyan-400/55 bg-cyan-600/30 text-cyan-50"
