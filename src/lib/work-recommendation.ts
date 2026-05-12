@@ -4,6 +4,8 @@
  */
 
 import type { SlotScore } from "./kma-weather";
+import { buildAttachmentAdvisory } from "./seeding-outcome-advisory";
+import type { WeatherLike } from "./seeding-day-eval";
 
 export type SafetyTri = "안전" | "주의" | "긴급";
 
@@ -16,6 +18,12 @@ export interface WorkRecommendationLocal {
   scope: string;
   /** 산출 근거 안내 */
   basisNote: string;
+  /** 해저 안착 추정·과제형 참고선(50%)·살포 성공과의 구분 */
+  attachmentOutlook: string;
+  /** 항속 저속·휴항 등 행동 권고 */
+  attachmentOperationCue: string;
+  /** 상단 AI 자막용 짧은 조각 */
+  attachmentTickerCue: string;
 }
 
 /** 서울 기준 달력 날짜 YYYY-MM-DD */
@@ -83,10 +91,29 @@ export function buildLocalWorkRecommendation(
   safetyLevel: SafetyTri,
   windMps: number,
   waveM: number,
+  opts?: {
+    windGustMps?: number;
+    visibilityKm?: number;
+    tempC?: number;
+    popPct?: number;
+    ptyCode?: number;
+  },
 ): WorkRecommendationLocal {
   const picked = pickScoresForToday(scores);
   const okHours = countVerdict(picked, "가능", 24) + countVerdict(picked, "주의", 24) * 0.5;
   const window = firstGoodWindowLabel(scores, 6);
+
+  const weatherLike: WeatherLike = {
+    windSpeed: windMps,
+    windGust: opts?.windGustMps ?? windMps * 1.28,
+    waveHeight: waveM,
+    visibility: opts?.visibilityKm ?? 10,
+    temp: opts?.tempC ?? 18,
+  };
+  const att = buildAttachmentAdvisory(weatherLike, safetyLevel, {
+    popPct: opts?.popPct,
+    ptyCode: opts?.ptyCode,
+  });
 
   if (safetyLevel === "긴급") {
     return {
@@ -94,6 +121,9 @@ export function buildLocalWorkRecommendation(
       workload: "살포 작업 0건 권고. 선박·인력 안전 확보·대기만 수행하세요.",
       scope: "본함 인근·피항 가능 수역만 이동. 외해 확장·종자 살포는 하지 마세요.",
       basisNote: `현재 풍속 ${windMps.toFixed(1)} m/s, 파고 ${waveM.toFixed(1)} m 등으로 긴급 단계입니다. 단기예보 슬롯과 결합한 관제 화면 권고이며, 현장 지휘·기관 지침이 우선입니다.`,
+      attachmentOutlook: att.outlook,
+      attachmentOperationCue: att.operationCue,
+      attachmentTickerCue: att.tickerCue,
     };
   }
 
@@ -106,6 +136,9 @@ export function buildLocalWorkRecommendation(
       workload: `살포·작업은 소규모로 제한(예: 반나절 ${Math.max(2, Math.min(6, Math.floor(okHours / 2)))}건 이하 권고).`,
       scope: "연안 시험·관제 화면에 표시된 구역 내, 풍속·파고 상한을 넘기지 않는 범위로만 확장하세요.",
       basisNote: "기상청 단기예보 기반 슬롯 점수(가능·주의·불가)입니다. 실제 출항은 승선원·항만당국 지침을 따르세요.",
+      attachmentOutlook: att.outlook,
+      attachmentOperationCue: att.operationCue,
+      attachmentTickerCue: att.tickerCue,
     };
   }
 
@@ -122,5 +155,8 @@ export function buildLocalWorkRecommendation(
     workload: `예보상 여유 시간이 있을 때 집중 작업 권장 — 하루 살포·이동 루트는 약 ${suggested}건(회선) 이하로 계획하고, 중간 휴식·기상 재확인을 넣으세요.`,
     scope: "남해안 권역 시험해역·관제 화면 운항구역 내에서만 살포. 시정 악화·풍향 급변 시 즉시 축소하세요.",
     basisNote: "기상청 단기예보 슬롯의 안전 점수(가능·주의·불가)로 산출한 참고값입니다. 법정 기준이 아닙니다.",
+    attachmentOutlook: att.outlook,
+    attachmentOperationCue: att.operationCue,
+    attachmentTickerCue: att.tickerCue,
   };
 }

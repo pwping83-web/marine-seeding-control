@@ -1,9 +1,10 @@
 /**
- * WeatherTimelineTracker — 심플 기상 예측 타임라인
- * 지도 하단 얇은 스트립. 8시간 슬롯을 컬러 칸으로 표시.
+ * WeatherTimelineTracker — 기상 예측 타임라인 (지도 하단 중앙)
+ * 관제 패널·InfoCard와 동일 계열: 다크 네이비, 틸 보더, 기술적 밀도.
  */
 
 import { useMemo, useState, useEffect } from "react";
+import { AlertTriangle, Ship, Zap } from "lucide-react";
 import type { SlotScore } from "@/lib/kma-weather";
 
 interface Props {
@@ -19,9 +20,13 @@ function slotHour(offset: number) {
 }
 
 function slotColor(verdict: string, score: number) {
-  if (verdict === "불가" || score < 50) return { bg: "#ef4444", text: "#fca5a5", dim: "rgba(239,68,68,0.38)" };
-  if (verdict === "주의" || score < 72) return { bg: "#f59e0b", text: "#fcd34d", dim: "rgba(245,158,11,0.36)" };
-  return { bg: "#10b981", text: "#6ee7b7", dim: "rgba(16,185,129,0.34)" };
+  if (verdict === "불가" || score < 50) {
+    return { bg: "#dc2626", fill: "rgba(220,38,38,0.88)", dim: "rgba(220,38,38,0.32)", ring: "rgba(248,113,113,0.55)" };
+  }
+  if (verdict === "주의" || score < 72) {
+    return { bg: "#d97706", fill: "rgba(217,119,6,0.88)", dim: "rgba(245,158,11,0.28)", ring: "rgba(251,191,36,0.45)" };
+  }
+  return { bg: "#0d9488", fill: "rgba(13,148,136,0.85)", dim: "rgba(20,184,166,0.28)", ring: "rgba(45,212,191,0.4)" };
 }
 
 export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: Props) {
@@ -33,9 +38,9 @@ export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: P
     return () => clearInterval(id);
   }, []);
 
-  const dangerIdx  = useMemo(() => slots.findIndex((s) => s.verdict === "불가"), [slots]);
+  const dangerIdx = useMemo(() => slots.findIndex((s) => s.verdict === "불가"), [slots]);
   const cautionIdx = useMemo(() => slots.findIndex((s) => s.verdict === "주의"), [slots]);
-  const targetIdx  = dangerIdx >= 0 ? dangerIdx : cautionIdx;
+  const targetIdx = dangerIdx >= 0 ? dangerIdx : cautionIdx;
 
   const minsLeft = useMemo(() => {
     if (targetIdx <= 0) return null;
@@ -44,7 +49,7 @@ export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: P
   }, [targetIdx]);
 
   const arrivalTime = useMemo(() => {
-    if (!minsLeft) return null;
+    if (minsLeft == null) return null;
     const d = new Date();
     d.setMinutes(d.getMinutes() + minsLeft, 0, 0);
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
@@ -52,80 +57,124 @@ export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: P
 
   if (slots.length === 0) return null;
 
-  const isDanger  = safetyLevel === "긴급";
+  const isDanger = safetyLevel === "긴급";
   const isCaution = safetyLevel === "주의";
-  const accentCol = isDanger ? "#ef4444" : isCaution ? "#f59e0b" : "#10b981";
+  const accentBar = isDanger ? "#f87171" : isCaution ? "#fbbf24" : "#2dd4bf";
+  const accentGlow = isDanger ? "rgba(248,113,113,0.22)" : isCaution ? "rgba(251,191,36,0.18)" : "rgba(45,212,191,0.16)";
 
   return (
     <div
-      className="pointer-events-none select-none absolute"
-      style={{ bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 25, width: "min(420px, 88vw)" }}
+      className="pointer-events-none absolute z-[25] w-[min(28rem,calc(100vw-2rem))] select-none"
+      style={{ bottom: "1.15rem", left: "50%", transform: "translateX(-50%)" }}
     >
+      <style>{`
+        @keyframes wtt-slot-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.35); }
+          50% { box-shadow: 0 0 0 3px rgba(248,113,113,0.12); }
+        }
+        .wtt-slot-pulse { animation: wtt-slot-pulse 1.35s ease-in-out infinite; }
+      `}</style>
       <div
-        className="flex items-center gap-2 px-3 py-2 rounded-2xl"
+        className="flex items-stretch gap-2.5 rounded-xl px-3 py-2 sm:gap-3 sm:px-3.5 sm:py-2.5"
         style={{
-          background: "linear-gradient(180deg, rgba(8,18,42,0.88) 0%, rgba(4,10,24,0.82) 100%)",
-          backdropFilter: "blur(12px)",
-          border: `1px solid ${accentCol}55`,
-          boxShadow: `0 4px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)`,
+          background: "linear-gradient(160deg, rgba(12,39,72,0.94) 0%, rgba(8,27,52,0.96) 52%, rgba(6,16,24,0.94) 100%)",
+          border: "1px solid rgba(64,224,208,0.22)",
+          boxShadow: `0 14px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px ${accentGlow}`,
+          backdropFilter: "blur(14px)",
         }}
       >
-        {/* 선박 아이콘 */}
-        <span style={{ fontSize: 18, lineHeight: 1, filter: "drop-shadow(0 0 6px rgba(0,200,255,0.7))" }}>🚢</span>
+        <span className="w-1 shrink-0 self-stretch rounded-full" style={{ background: accentBar }} aria-hidden />
 
-        {/* 8시간 슬롯 */}
-        <div className="flex flex-1 gap-0.5">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border sm:h-10 sm:w-10"
+          style={{
+            borderColor: "rgba(64,224,208,0.28)",
+            background: "rgba(8, 27, 52, 0.65)",
+            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)",
+          }}
+          aria-hidden
+        >
+          <Ship className="h-4 w-4 text-teal-300/90 sm:h-[1.05rem] sm:w-[1.05rem]" strokeWidth={2} />
+        </div>
+
+        <div className="flex min-w-0 flex-1 gap-0.5 sm:gap-1">
           {slots.map((s, i) => {
             const c = slotColor(s.verdict, s.score);
             const isNow = i === 0;
             const isTarget = i === targetIdx && targetIdx > 0;
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5"
-                title={`${slotHour(i)}:00 — ${s.verdict} (${Math.round(s.score)}점)`}>
-                {/* 시간 레이블 */}
-                <span className="text-[8px] font-mono leading-none"
-                  style={{ color: isNow ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.42)" }}>
+              <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={`${slotHour(i)}:00 — ${s.verdict} (${Math.round(s.score)}점)`}>
+                <span
+                  className="text-[8px] font-semibold tabular-nums leading-none sm:text-[9px]"
+                  style={{ color: isNow ? "rgba(204,251,241,0.92)" : "rgba(148,163,184,0.72)" }}
+                >
                   {isNow ? "지금" : `${slotHour(i)}시`}
                 </span>
-                {/* 컬러 막대 */}
-                <div className="w-full rounded-md relative"
+                <div
+                  className={`relative w-full rounded-md ${isTarget && isDanger ? "wtt-slot-pulse" : ""}`}
                   style={{
-                    height: isNow ? 20 : 14,
-                    background: isNow ? c.bg : c.dim,
-                    border: isTarget ? `1.5px solid ${c.bg}` : isNow ? `1px solid ${c.bg}` : "1px solid transparent",
-                    boxShadow: (isNow || isTarget) ? `0 0 6px ${c.bg}60` : "none",
-                    animation: isTarget && isDanger ? "pulse 1s infinite" : "none",
-                  }}>
-                  {isTarget && (
-                    <span className="absolute inset-0 flex items-center justify-center text-[8px]">
-                      {dangerIdx >= 0 ? "⚡" : "⚠️"}
+                    height: isNow ? 18 : 13,
+                    background: isNow ? c.fill : c.dim,
+                    border: isTarget ? `1.5px solid ${c.ring}` : isNow ? `1px solid ${c.bg}99` : "1px solid rgba(15,23,42,0.35)",
+                    boxShadow: isNow ? `inset 0 1px 0 rgba(255,255,255,0.12), 0 0 8px ${c.bg}33` : "inset 0 1px 0 rgba(0,0,0,0.2)",
+                  }}
+                >
+                  {isTarget ? (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      {dangerIdx >= 0 ? (
+                        <Zap className="h-3 w-3 text-white/95 drop-shadow-sm" strokeWidth={2.5} aria-hidden />
+                      ) : (
+                        <AlertTriangle className="h-3 w-3 text-white/95 drop-shadow-sm" strokeWidth={2.2} aria-hidden />
+                      )}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* 우측 상태 요약 */}
-        <div className="shrink-0 text-right" style={{ minWidth: 72 }}>
-          {targetIdx > 0 && arrivalTime ? (
+        <div
+          className="flex min-w-[4.75rem] shrink-0 flex-col justify-center gap-0.5 border-l border-teal-400/15 pl-2.5 sm:min-w-[5.5rem] sm:pl-3"
+        >
+          {targetIdx > 0 && arrivalTime != null && minsLeft != null ? (
             <>
-              <p className="text-[9px] font-bold" style={{ color: dangerIdx >= 0 ? "#fca5a5" : "#fcd34d" }}>
-                {dangerIdx >= 0 ? "⚡ 위험" : "⚠️ 주의"}
+              <p
+                className="flex items-center gap-1 text-[9px] font-bold leading-none"
+                style={{ color: dangerIdx >= 0 ? "#fecaca" : "#fde68a" }}
+              >
+                {dangerIdx >= 0 ? (
+                  <Zap className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={2.2} aria-hidden />
+                )}
+                {dangerIdx >= 0 ? "위험 예고" : "주의 예고"}
               </p>
-              <p className="text-[13px] font-black text-white leading-tight tabular-nums">{arrivalTime}</p>
-              <p className="text-[8px] text-white/50">
-                {minsLeft! >= 60 ? `${Math.floor(minsLeft! / 60)}h ${minsLeft! % 60}m 후` : `${minsLeft}분 후`}
+              <p className="font-mono text-sm font-bold tabular-nums leading-tight text-slate-50 sm:text-[15px]">{arrivalTime}</p>
+              <p className="text-[8px] font-medium tabular-nums text-slate-500">
+                {minsLeft >= 60 ? `${Math.floor(minsLeft / 60)}시간 ${minsLeft % 60}분 후` : `${minsLeft}분 후`}
               </p>
             </>
-          ) : (isDanger || (targetIdx === 0 && dangerIdx === 0)) ? (
-            <p className="text-[11px] font-black text-red-400 leading-snug animate-pulse">🚨 지금<br />위험</p>
+          ) : isDanger || (targetIdx === 0 && dangerIdx === 0) ? (
+            <div
+              className="rounded-md border px-2 py-1.5"
+              style={{
+                borderColor: "rgba(248,113,113,0.45)",
+                background: "rgba(69,10,10,0.45)",
+                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)",
+              }}
+            >
+              <p className="flex items-center gap-1 text-[10px] font-bold leading-tight text-red-100">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-300" strokeWidth={2.4} aria-hidden />
+                지금 위험
+              </p>
+              <p className="mt-0.5 text-[8px] leading-snug text-red-200/75">즉시 기상·관제 확인</p>
+            </div>
           ) : (
             <>
-              <p className="text-[9px] text-emerald-400 font-bold">✓ 안전</p>
-              <p className="text-[11px] font-black text-white">8시간</p>
-              <p className="text-[8px] text-white/50">이상 없음</p>
+              <p className="text-[9px] font-semibold leading-none text-teal-300/90">구간 양호</p>
+              <p className="text-xs font-bold tabular-nums text-slate-100 sm:text-sm">8시간</p>
+              <p className="text-[8px] text-slate-500">예보 슬롯 기준</p>
             </>
           )}
         </div>

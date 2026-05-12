@@ -34,6 +34,8 @@ import {
   Upload,
   Crosshair,
   Sparkles,
+  Waypoints,
+  Route,
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
 import ManualModal, { ManualButton } from "./ManualModal";
@@ -69,10 +71,14 @@ import {
 } from "./components/EmergencyDemoOverlay";
 import { WeatherTimelineTracker } from "./components/WeatherTimelineTracker";
 import { WorkPlanAiModal } from "./components/WorkPlanAiModal";
+import { TodayTrackReportModal } from "./components/TodayTrackReportModal";
+import { TrackRecordSidebarHint } from "./components/TrackRecordSidebarHint";
 import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
 import { analyzeWorkPlanBriefWithGroq, type WorkPlanGroqBrief } from "@/lib/groq-work-plan";
 import { isGroqConfigured } from "@/lib/groq-weather";
 import { loadWorkAiUserNote, saveWorkAiUserNote } from "@/lib/work-ai-user-note";
+import { ymdLocal } from "@/lib/seeding-day-eval";
+import { buildSampleLteForYmdRange, trackReportUsesTestSample } from "@/lib/track-report-test-sample";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -809,6 +815,8 @@ export default function Dashboard() {
   const [workAiUserNote, setWorkAiUserNote] = useState("");
 
   const [showVisionModal, setShowVisionModal] = useState(false);
+  const [trackReportModalOpen, setTrackReportModalOpen] = useState(false);
+  const [showTodayTrackReplayOnMap, setShowTodayTrackReplayOnMap] = useState(false);
 
   // ── B2G 시연 전용 상태 ────────────────────────────────────────────────────
   const [demoWeatherMode, setDemoWeatherMode] = useState<"normal" | "danger">("normal");
@@ -867,10 +875,24 @@ export default function Dashboard() {
     return Date.now() - new Date(last.recorded_at).getTime() < 25 * 60 * 1000;
   }, [lteTrackPoints]);
 
-  const workLocalRec = useMemo(
-    () => buildLocalWorkRecommendation(forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight),
-    [forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight],
-  );
+  const workLocalRec = useMemo(() => {
+    const slot = forecastScores[0]?.slot;
+    return buildLocalWorkRecommendation(forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight, {
+      windGustMps: weather.windGust,
+      visibilityKm: weather.visibility,
+      tempC: weather.temp,
+      popPct: slot?.pop,
+      ptyCode: slot?.ptyCode,
+    });
+  }, [
+    forecastScores,
+    safetyLevel,
+    weather.windSpeed,
+    weather.waveHeight,
+    weather.windGust,
+    weather.visibility,
+    weather.temp,
+  ]);
 
   const vesselLteId = useMemo(() => vesselLteIdFromEnv(), []);
 
@@ -884,6 +906,42 @@ export default function Dashboard() {
     }
     return { lat: vessel.lat, lng: vessel.lng, heading: vessel.heading };
   }, [isRealWithGps, gpsVessel, vessel.lat, vessel.lng, vessel.heading]);
+
+  const clockYmd = ymdLocal(clock);
+  const todayReplayTrackPath = useMemo((): [number, number][] => {
+    const t0 = startOfDayMs(clockYmd);
+    const t1 = endOfDayMs(clockYmd);
+    if (trackReportUsesTestSample()) {
+      return buildSampleLteForYmdRange(clockYmd, clockYmd).map((p) => [p.lat, p.lng] as [number, number]);
+    }
+    const lteToday = lteTrackPoints
+      .filter((p) => {
+        const ts = new Date(p.recorded_at).getTime();
+        return ts >= t0 && ts <= t1;
+      })
+      .sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
+      .map((p) => [p.lat, p.lng] as [number, number]);
+    if (lteToday.length >= 2) return lteToday;
+    const dropsToday = drops
+      .filter((d) => d.recordedAt >= t0 && d.recordedAt <= t1)
+      .sort((a, b) => a.recordedAt - b.recordedAt)
+      .map((d) => [d.lat, d.lng] as [number, number]);
+    if (dropsToday.length >= 2) return dropsToday;
+    if (dropsToday.length === 1) {
+      return [...dropsToday, [leafletVessel.lat, leafletVessel.lng] as [number, number]];
+    }
+    return [];
+  }, [clockYmd, lteTrackPoints, drops, leafletVessel.lat, leafletVessel.lng]);
+
+  useEffect(() => {
+    setShowTodayTrackReplayOnMap(false);
+  }, [clockYmd]);
+
+  useEffect(() => {
+    if (showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2) {
+      setShowTodayTrackReplayOnMap(false);
+    }
+  }, [showTodayTrackReplayOnMap, todayReplayTrackPath.length]);
 
   const leafletDrops = useMemo(
     () =>
@@ -1588,6 +1646,18 @@ export default function Dashboard() {
         userNote={workAiUserNote}
         onUserNoteSave={saveWorkAiNote}
       />
+      <TodayTrackReportModal
+        open={trackReportModalOpen}
+        onClose={() => setTrackReportModalOpen(false)}
+        referenceDate={clock}
+        drops={drops}
+        weather={weather}
+        vesselLat={leafletVessel.lat}
+        vesselLng={leafletVessel.lng}
+        pathLatLng={leafletPathLatLng}
+        lteTrackPoints={lteTrackPoints}
+        vesselName={VESSEL_NAME}
+      />
 
       {returnCommandModalOpen && (
         <div
@@ -1636,8 +1706,9 @@ export default function Dashboard() {
             windSpeed: weather.windSpeed,
             windDir: weather.windDir,
             waveHeight: weather.waveHeight,
-            ptyCode: weather.windSpeed > 10 ? 1 : 0,
+            ptyCode: forecastScores[0]?.slot.ptyCode ?? 0,
             temp: weather.temp,
+            pop: forecastScores[0]?.slot.pop ?? 0,
           }}
           onSafetyLevelChange={setSafetyLevel}
           onScoresChange={setForecastScores}
@@ -1763,7 +1834,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setWorkAiModalOpen(true)}
-                  title="누르면 금일 작업 시간·작업량·범위 요약(보조)을 봅니다"
+                  title="누르면 금일 작업·안착(해저)·과제형 50% 참고·현장 행동 권고를 봅니다"
                   className="work-ai-hint-btn group mr-1.5 mt-0.5 -translate-x-1 translate-y-0.5 flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-cyan-400/55 bg-gradient-to-br from-cyan-950/95 via-teal-950/90 to-slate-900/95 text-[9px] font-black leading-none tracking-tight text-cyan-50 shadow-sm transition-all hover:border-cyan-300/70 hover:from-cyan-900/95 hover:via-teal-900/92 active:scale-95"
                   aria-label="AI 금일 작업 보조 요약 열기"
                 >
@@ -1805,7 +1876,10 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{VESSEL_NAME} · 기상·긴급 요약 자막(상단)</p>
+                <p className="mt-1.5 border-t border-white/[0.06] pt-1.5 text-[10px] leading-snug text-violet-100/88">
+                  <span className="font-semibold text-violet-300/95">AI · 해저 안착(추정)</span>{" "}
+                  {workLocalRec.attachmentTickerCue} — 살포 성공(통신)과는 별개 지표입니다.
+                </p>
               </div>
             </div>
           );
@@ -1857,6 +1931,60 @@ export default function Dashboard() {
                 <p className="text-xs font-mono font-medium leading-tight text-slate-200 tabular-nums">{c.val}</p>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div
+          className="shrink-0 border-b border-white/[0.06] px-3 py-2"
+          style={{ background: SIDEBAR_SECTION_TINT }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="inline-flex min-w-0 max-w-[38%] shrink-0 items-center gap-1.5 text-[11px] font-medium text-slate-300 sm:max-w-[44%]">
+              <Waypoints className="h-3.5 w-3.5 shrink-0 text-teal-400/60" aria-hidden />
+              <span className="truncate">항적 기록</span>
+            </span>
+            <TrackRecordSidebarHint />
+            <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              title="항적 기록 — 출발·경로·복귀·살포·기상·평가·CSV (테스트 시 샘플)"
+              aria-label="항적 기록 열기"
+              onClick={() => setTrackReportModalOpen(true)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-teal-100/90 transition-colors hover:border-teal-400/45 hover:bg-teal-500/12 hover:text-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/25"
+              style={{
+                background: SIDEBAR_CARD_BG,
+                borderColor: "rgba(64,224,208,0.22)",
+              }}
+            >
+              <Waypoints className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+            <button
+              type="button"
+              title={
+                todayReplayTrackPath.length < 2
+                  ? "오늘 표시할 항적 좌표가 부족합니다(2점 이상 필요)"
+                  : showTodayTrackReplayOnMap
+                    ? "금일 항적 시뮬레이션 끄기"
+                    : "금일 항적 기록을 지도에 표시(시뮬)"
+              }
+              aria-label="금일 항적 지도 표시 토글"
+              disabled={!showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2}
+              onClick={() => {
+                if (!showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2) return;
+                setShowTodayTrackReplayOnMap((v) => !v);
+                setMapFitNonce((n) => n + 1);
+              }}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-fuchsia-100/90 transition-colors hover:border-fuchsia-400/50 hover:bg-fuchsia-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/30 disabled:cursor-not-allowed disabled:opacity-40 ${
+                showTodayTrackReplayOnMap ? "ring-2 ring-fuchsia-400/50 border-fuchsia-400/45 bg-fuchsia-950/35" : ""
+              }`}
+              style={{
+                background: SIDEBAR_CARD_BG,
+                borderColor: "rgba(217,70,239,0.28)",
+              }}
+            >
+              <Route className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
           </div>
         </div>
 
@@ -2193,6 +2321,7 @@ export default function Dashboard() {
           windSpeed={weather.windSpeed}
           waveHeight={weather.waveHeight}
           temp={weather.temp}
+          attachmentCue={workLocalRec.attachmentTickerCue}
         />
 
         {/* Map container / Work plan view */}
@@ -2264,6 +2393,7 @@ export default function Dashboard() {
               vessel={leafletVessel}
               pathLatLng={leafletPathLatLng}
               ltePathLatLng={lteFollowEnabled ? ltePathLatLng : []}
+              replayTrackPathLatLng={showTodayTrackReplayOnMap ? todayReplayTrackPath : []}
               vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
               panMapToVesselOnMove={isRealWithGps || (lteFollowEnabled && lteRemoteFresh && mapMode === "test")}
               fitToVesselOnly={isRealWithGps}
@@ -2591,7 +2721,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 // ─── AI 자막 Ticker ──────────────────────────────────────────────────────────
 
 function AiTicker({
-  safetyLevel, groqSummary, aiMsg, windSpeed, waveHeight, temp,
+  safetyLevel, groqSummary, aiMsg, windSpeed, waveHeight, temp, attachmentCue,
 }: {
   safetyLevel: string;
   groqSummary: string;
@@ -2599,14 +2729,17 @@ function AiTicker({
   windSpeed: number;
   waveHeight: number;
   temp: number;
+  attachmentCue: string;
 }) {
   const color = safetyLevel === "긴급" ? "#fca5a5" : safetyLevel === "주의" ? "#fcd34d" : "#6ee7b7";
   const base = `${safetyLevel === "긴급" ? "🚨 즉시 회항 권고" : safetyLevel === "주의" ? "⚠️ 기상 주의" : "✅ 안전 운항"} · 풍속 ${windSpeed.toFixed(1)}m/s · 파고 ${waveHeight.toFixed(1)}m · 기온 ${temp.toFixed(0)}°C`;
   const g = groqSummary.trim();
   const a = aiMsg.trim();
   const extra = g ? ` · ⚡ ${g}` : a ? ` · ${a}` : "";
+  const att = attachmentCue.trim();
+  const attPart = att ? ` · 🌱 ${att}` : "";
   /** 한 줄: 오른쪽 밖(translateX(100%))에서 들어와 왼쪽으로 전부 빠질 때까지(-100%) 이동 후 정지 */
-  const segment = `${VESSEL_NAME} · ${base}${extra}`;
+  const segment = `${VESSEL_NAME} · ${base}${extra}${attPart}`;
   const scrollSec = 22;
   const pauseSec = 30;
   const cycleSec = scrollSec + pauseSec;

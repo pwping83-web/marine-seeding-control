@@ -70,6 +70,8 @@ type Props = {
   offlineNoTiles?: boolean;
   /** 해상 기기(LTE)로 수집한 선박 궤적 — 시뮬 항적과 구분해 주황색으로 표시 */
   ltePathLatLng?: [number, number][];
+  /** 금일 항적 기록 재생(시뮬) — 보라색 실선, 끄면 비표시 */
+  replayTrackPathLatLng?: [number, number][];
   /** 작업 계획 등 — 살포 점과 별도의 계획 후보 마커(예: 제1구역 격자) */
   planMarkers?: ReadonlyArray<{ lat: number; lng: number; label: string }>;
   /** true면 맞춤 줌에 살포·항적·LTE 궤적을 넣지 않고 선박+planMarkers만 사용 */
@@ -242,11 +244,13 @@ export function MarineLeafletMap({
   maxBounds = OPS_AREA_MAX_BOUNDS,
   offlineNoTiles = false,
   ltePathLatLng = [],
+  replayTrackPathLatLng = [],
   planMarkers = [],
   scheduleFocusFit = false,
 }: Props) {
   const fitPoints = useMemo(() => {
     const lte = ltePathLatLng ?? [];
+    const replay = replayTrackPathLatLng ?? [];
     const plans = planMarkers ?? [];
     if (scheduleFocusFit && plans.length > 0) {
       const raw: L.LatLngExpression[] = [
@@ -261,6 +265,7 @@ export function MarineLeafletMap({
         ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
         ...pathLatLng,
         ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
+        ...replay.map(([la, ln]) => [la, ln] as L.LatLngExpression),
       ];
       const k = filterPointsNearKorea(raw);
       return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
@@ -269,6 +274,7 @@ export function MarineLeafletMap({
       const raw: L.LatLngExpression[] = [
         [vessel.lat, vessel.lng] as L.LatLngExpression,
         ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
+        ...replay.map(([la, ln]) => [la, ln] as L.LatLngExpression),
       ];
       const k = filterPointsNearKorea(raw);
       return k.length > 0 ? k : [opsCenterTuple() as L.LatLngExpression];
@@ -278,6 +284,7 @@ export function MarineLeafletMap({
       ...drops.map((d) => [d.lat, d.lng] as L.LatLngExpression),
       ...pathLatLng,
       ...lte.map(([la, ln]) => [la, ln] as L.LatLngExpression),
+      ...replay.map(([la, ln]) => [la, ln] as L.LatLngExpression),
       ...(planMarkers ?? []).map((p) => [p.lat, p.lng] as L.LatLngExpression),
     ];
     const k = filterPointsNearKorea(raw);
@@ -290,6 +297,7 @@ export function MarineLeafletMap({
     fitToVesselOnly,
     hideVesselMarker,
     ltePathLatLng,
+    replayTrackPathLatLng,
     planMarkers,
     scheduleFocusFit,
   ]);
@@ -338,6 +346,18 @@ export function MarineLeafletMap({
             color: "#fb923c",
             weight: 3,
             opacity: 0.88,
+          }}
+        />
+      ) : null}
+
+      {replayTrackPathLatLng.length > 1 ? (
+        <Polyline
+          positions={replayTrackPathLatLng.map(([la, ln]) => L.latLng(la, ln))}
+          pathOptions={{
+            color: "#d946ef",
+            weight: 3,
+            opacity: 0.9,
+            dashArray: "5 7",
           }}
         />
       ) : null}

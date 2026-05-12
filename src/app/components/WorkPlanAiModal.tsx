@@ -189,6 +189,18 @@ export function WorkPlanAiModal({
               hint={ai?.scopeHint}
               hintReserved={groqConfigured}
             />
+            <Section
+              title="종자 안착·과제 참고(50% 선)"
+              body={local.attachmentOutlook}
+              hint={ai?.attachmentHint}
+              hintReserved={groqConfigured}
+            />
+            <Section
+              title="안착률을 높이는 현장 행동"
+              body={local.attachmentOperationCue}
+              hint={ai?.operationHint}
+              hintReserved={groqConfigured}
+            />
 
             <div className="flex min-h-[1.375rem] items-center justify-center text-center text-[11px] text-cyan-200/60">
               {aiLoading && groqConfigured ? "보조 문구 생성 중…" : "\u00a0"}
