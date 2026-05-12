@@ -19,7 +19,7 @@ import {
   Download,
   Droplets,
   Info,
-  Map,
+  Map as MapIcon,
   MapPin,
   Navigation,
   Play,
@@ -2005,7 +2005,7 @@ export default function Dashboard() {
                     : "text-slate-400 hover:bg-teal-950/30 hover:text-teal-100/90"
                 }`}
               >
-                {v === "map" ? <Map className="w-3.5 h-3.5 shrink-0 opacity-90" /> : <Calendar className="w-3.5 h-3.5 shrink-0 opacity-90" />}
+                {v === "map" ? <MapIcon className="w-3.5 h-3.5 shrink-0 opacity-90" /> : <Calendar className="w-3.5 h-3.5 shrink-0 opacity-90" />}
                 <span className="truncate">{v === "map" ? "실시간 관제" : "작업 계획"}</span>
               </button>
             ))}
@@ -2068,7 +2068,7 @@ export default function Dashboard() {
                 title="살포 점 외곽(Convex Hull) 기반 추정 면적. 격자 정밀 측량 아님."
               >
                 <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                  <Map className="h-3 w-3 text-teal-400/55" aria-hidden />
+                  <MapIcon className="h-3 w-3 text-teal-400/55" aria-hidden />
                   구역 추정 면적
                 </span>
                 <span className="font-mono text-sm font-bold text-teal-200/80">{formatAreaHa(seedingAreaHa)}</span>

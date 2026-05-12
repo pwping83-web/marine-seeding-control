@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap } from "react-leaflet";
-import L from "leaflet";
+import * as L from "leaflet";
 import {
   Brain,
   CircleSlash,

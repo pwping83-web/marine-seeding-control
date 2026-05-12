@@ -27,7 +27,9 @@
     "grant:watch:cache": "node scripts/grant-watch/run.mjs --from-cache",
     "grant:watch:headed": "powershell -NoProfile -Command \"$env:HEADED='1'; node scripts/grant-watch/run.mjs\"",
     "grant:manual": "node scripts/grant-watch/manual-notices.mjs",
-    "grant:manual:json": "node scripts/grant-watch/manual-notices.mjs --json"
+    "grant:manual:json": "node scripts/grant-watch/manual-notices.mjs --json",
+    "growth:advisor": "node scripts/growth-advisor/run.mjs",
+    "growth:advisor:execute": "node scripts/growth-advisor/run.mjs --execute"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

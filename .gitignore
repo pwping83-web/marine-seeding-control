@@ -17,6 +17,9 @@ scripts/.gov-announce-watch-state.json
 scripts/.g2b-watch-schedule-marker.json
 scripts/.g2b-watch-schedule-marker
 
+# 성장 어드바이저 로컬 주기 상태
+scripts/.growth-advisor-state.json
+
 # 관공서 제출용 캡처(PNG 용량·민감정보 — 필요 시 zip으로만 제출)
 관공서-제출용/captures/*.png
 

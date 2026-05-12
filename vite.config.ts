@@ -53,6 +53,22 @@ function figmaAssetResolver() {
   }
 }
 
+/** `resolve.alias`의 `leaflet` → esm 은 `leaflet/dist/*.css` 를 깨므로 id === 'leaflet' 만 치환 */
+function leafletEsmEntry(): Plugin {
+  const leafletEsm = path.resolve(
+    __dirname,
+    'node_modules/leaflet/dist/leaflet-src.esm.js',
+  )
+  return {
+    name: 'leaflet-esm-entry',
+    enforce: 'pre',
+    resolveId(id) {
+      if (id === 'leaflet') return leafletEsm
+      return null
+    },
+  }
+}
+
 export default defineConfig({
   server: {
     /** `0.0.0.0`: 같은 머신의 LAN IP(예: 192.168.45.214)로도 접속 가능 */
@@ -65,6 +81,7 @@ export default defineConfig({
   plugins: [
     openBrowserOnReady(),
     figmaAssetResolver(),
+    leafletEsmEntry(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),
@@ -75,6 +92,7 @@ export default defineConfig({
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['leaflet'],
   },
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.

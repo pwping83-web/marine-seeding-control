@@ -94,6 +94,25 @@ VITE_GROQ_API_KEY=      ← https://console.groq.com → API Keys (무료)
 
 ---
 
+## 성장 어드바이저 (주기 점검·AI 프롬프트)
+
+**지원사업·특허·제품·B2G**를 정해진 주기로 질문 리스트와 로테이션 아이디어를 **마크다운으로 생성**합니다. 선택적으로 **`grant:watch`** 를 같은 실행에서 돌릴 수 있습니다.
+
+| 명령 | 설명 |
+|------|------|
+| `npm run growth:advisor` | `docs/운영-우선순위/growth-advisor-최근-프롬프트.md` 갱신(주기 지난 섹션만 전체 질문) |
+| `npm run growth:advisor -- --force` | 주기 무시·전 섹션 + 아이디어 전부 출력 |
+| `npm run growth:advisor:execute` | 위 + 설정에 따라 `grant:watch` 자동 실행(기본 14일마다) |
+
+- 설정: `config/growth-advisor.json`
+- 로컬 상태(커밋 안 함): `scripts/.growth-advisor-state.json`
+- Windows 매주 월 09:00 등록: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Register-GrowthAdvisorScheduledTask.ps1`  
+  - `grant:watch`까지 돌리려면: `$env:GROWTH_ADVISOR_EXECUTE='1'; ...Register-GrowthAdvisorScheduledTask.ps1`
+
+생성된 **`growth-advisor-최근-프롬프트.md`** 안의 「Cursor·AI에 한 번에 넣기」 블록을 복사하면, 대화형 AI가 **현재 상황 개선 아이디어**를 정리하기 쉽습니다.
+
+---
+
 ## 관련 문서
 
 | 경로 | 내용 |
@@ -102,7 +121,7 @@ VITE_GROQ_API_KEY=      ← https://console.groq.com → API Keys (무료)
 | `docs/사업-공고/해양수산부-제2026-77호-*.md` | 블루카본 R&D 요약 |
 | `docs/사업-공고/99_공고-모니터링-최근결과.md` | 최신 공고 모니터링 결과 |
 | `docs/제품-운영/프로젝트_자문메모_2026-05-03.md` | 계약·IP 판단 메모 |
-| `docs/납품-IP-전략/지식재산긴급지원-체크리스트.md` | 특허·상표 체크리스트 |
+| `docs/운영-우선순위/growth-advisor-최근-프롬프트.md` | 성장·IP·지원사업 주기 점검(`npm run growth:advisor`) |
 | `관공서-제출용/docs/운영·납품-보완-체크리스트.md` | 납품 전 체크리스트 |
 
 ---

@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "outputMarkdownPath": "docs/운영-우선순위/growth-advisor-최근-프롬프트.md",
+  "statePath": "scripts/.growth-advisor-state.json",
+  "sections": [
+    {
+      "id": "grants",
+      "title": "지원사업·공고·실증",
+      "everyDays": 7,
+      "questions": [
+        "이번 주 IRIS·NTIS·SMES 허브에서 **신규로 맞는 공고**를 골라 **1건이라도** 검토했나요? (`npm run grant:watch` → `docs/사업-공고/99_공고-모니터링-최근결과.md`)",
+        "**수요조사·사전과제** 마감이 임박한 항목이 있나요? `docs/운영-우선순위/README.md` 상단과 대조했나요?",
+        "**주관·파트너(대학·출연연)** 가 필요한 공고에 대해, 연락을 취했거나 다음 차수를 캘린더에 넣었나요?"
+      ],
+      "docLinks": [
+        { "label": "사업·공고 폴더", "path": "docs/사업-공고/README.md" },
+        { "label": "공고 모니터링 결과(자동 생성)", "path": "docs/사업-공고/99_공고-모니터링-최근결과.md" }
+      ]
+    },
+    {
+      "id": "ip",
+      "title": "특허·지식재산·지원",
+      "everyDays": 14,
+      "questions": [
+        "**특허·실용신안** 출원 또는 선행기술 조사를 **진행 중·예약**인가요? (IP나래·지역 IP센터 등)",
+        "**지식재산 긴급지원·중소 지재** 관련 공고를 `grant:watch` 결과에서 확인했나요?",
+        "관제·기상·항로·살포 기록 UI 중 **출원 후보 기능**을 한 줄로 적어두었나요?"
+      ],
+      "docLinks": [
+        { "label": "납품·IP 전략 인덱스", "path": "docs/납품-IP-전략/문서-인덱스.md" },
+        { "label": "지식재산 긴급지원 체크리스트", "path": "docs/납품-IP-전략/지식재산긴급지원-체크리스트.md" }
+      ]
+    },
+    {
+      "id": "product",
+      "title": "제품 성장·현장",
+      "everyDays": 7,
+      "questions": [
+        "**시연 URL·LAN 주소**가 최신 빌드와 맞나요? (`README.md` 시연 절)",
+        "관공서 제출용 **캡처**를 다시 뽑을 시점인가요? (`npm run capture:gov`)",
+        "아두이노·LTE·실해역 전 **단계 시험**(연못→호수→…) 중 어디까지 완료했나요?"
+      ],
+      "docLinks": [
+        { "label": "관공서 제출용", "path": "관공서-제출용/README.md" },
+        { "label": "하드웨어·단말", "path": "docs/hardware-arduino-gnss-seed/README.md" }
+      ]
+    },
+    {
+      "id": "b2g",
+      "title": "조달·기관 연락",
+      "everyDays": 21,
+      "questions": [
+        "**나라장터** 키워드 알림 또는 `npm run g2b:watch`를 돌려 볼 만한 시점인가요?",
+        "해수부·지자체 **공모·실증** 공지를 `npm run gov:announce` 로 한 번 훑었나요?",
+        "기관 기술 문의 메일을 보낼 **공고·민원 창구**가 정해졌나요? (`docs/사업-공고/국가해양기관-기술문의-메일-검토및절차.md`)"
+      ],
+      "docLinks": [
+        { "label": "공공 문의 루트", "path": "docs/납품-IP-전략/공공정보수집-및-문의-루트.md" },
+        { "label": "기관 기술 문의 검토", "path": "docs/사업-공고/국가해양기관-기술문의-메일-검토및절차.md" }
+      ]
+    }
+  ],
+  "ideaPool": [
+    "실증 파트너(수산연·지역 양식장) 1곳과 **로그 공유·NDA** 초안만이라도 잡아보기",
+    "기상·해역 격자(`VITE_KMA_NX/NY`)를 **실제 작업 해역**으로 바꾼 스크린샷을 제출 패키지에 반영",
+    "살포 이력 CSV·PDF를 **감사 추적** 관점에서 한 페이지 설명으로 묶기",
+    "LTE 궤적 시연과 **오프라인 캐시** 시나리오를 README에 ‘운영 한계’로 명시",
+    "A* 항로·PID 네비와 **실선박 규제·해도 데이터** 출처를 문서에 표로 정리",
+    "Supabase 연동을 ‘선택’이 아닌 **파일럿 환경 변수 세트**로 문서화",
+    "오션랩·해경 수요조사 등 **제출 완료 여부**를 운영 README 체크박스로만 관리",
+    "영문 한 페이지 **one-pager** PDF (기관·해외 협력용)",
+    "지도 타일·측량 데이터 **라이선스** 표기를 제출용 캡처에 삽입",
+    "모의 SOS·명령 시나리오를 **안전 훈련 메뉴얼** 형태로 5분 분량으로 정리"
+  ],
+  "ideasPickCount": 3,
+  "autoExecute": {
+    "grantWatchEveryDays": 14,
+    "govAnnounceWatchEveryDays": 0
+  }
+}

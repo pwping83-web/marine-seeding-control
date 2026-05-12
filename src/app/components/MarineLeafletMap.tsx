@@ -9,7 +9,7 @@ import {
   Tooltip,
   useMap,
 } from "react-leaflet";
-import L from "leaflet";
+import * as L from "leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import {
   OPS_AREA_MAX_BOUNDS,
