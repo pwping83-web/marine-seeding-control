@@ -1,0 +1,39 @@
+%% 관공서 제출용 — 해양 종자 살포 관제 시스템 논리 구조 (저장소 구현 기준)
+flowchart TB
+  subgraph terminal["배상 단말 (아두이노·동급 임베디드)"]
+    T_GPS["GPS/GNSS"]
+    T_LTE["LTE"]
+    T_FW["HTTPS 클라이언트\n(지도 API 키 비탑재)"]
+  end
+
+  subgraph gateway["수집 게이트웨이 (Supabase Edge)"]
+    E_DROP["telemetry-ingest\n살포 이벤트"]
+    E_TRK["vessel-track-ingest\n선박 궤적"]
+    E_RL["검증·레이트 리밋\nX-Device-Ingest-Key"]
+  end
+
+  subgraph data["데이터 저장 (PostgreSQL)"]
+    DB_DROP[("seed_drop_records\n살포 이벤트")]
+    DB_TRK[("vessel_track_points\n항적 점")]
+  end
+
+  subgraph web["관제 웹 (브라우저 · Vite/React)"]
+    W_UI["지도·이력·신호·기상 UI"]
+    W_LS[("localStorage\n시연용 이력 백업")]
+    W_MET["기상청 API"]
+    W_AI["Groq 등\n요약·작업보조 선택"]
+  end
+
+  T_GPS --> T_FW
+  T_LTE --> T_FW
+  T_FW -->|"POST 살포"| E_DROP
+  T_FW -->|"POST 궤적"| E_TRK
+  E_DROP --> E_RL
+  E_TRK --> E_RL
+  E_DROP --> DB_DROP
+  E_TRK --> DB_TRK
+  W_UI <-->|"연동 시 조회"| DB_DROP
+  W_UI <-->|"연동 시 조회"| DB_TRK
+  W_UI --> W_MET
+  W_UI --> W_AI
+  W_UI --> W_LS

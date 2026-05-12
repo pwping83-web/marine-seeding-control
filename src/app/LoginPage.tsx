@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Lock, Mail, ShieldCheck, AlertCircle } from "lucide-react";
 import ManualModal, { ManualButton } from "./ManualModal";
+import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
@@ -157,7 +158,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
   return (
     <div
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden"
+      className="relative flex min-h-svh w-full flex-col overflow-hidden"
       style={{ background: "linear-gradient(175deg, #071f3a 0%, #051629 40%, #031020 100%)" }}
     >
       {/* ── CSS Keyframes ──────────────────────────────────────────────── */}
@@ -223,6 +224,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         }
       `}</style>
 
+      <div className="relative flex min-h-0 flex-1 w-full items-center justify-center overflow-hidden">
       {/* ── Floating depth rings (decorative) ──────────────────────────── */}
       <svg
         className="absolute inset-0 w-full h-full pointer-events-none"
@@ -714,6 +716,21 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
             transform: "translateY(50%)",
             zIndex: -1,
           }}
+        />
+      </div>
+      </div>
+
+      <div
+        className="shrink-0 w-full border-t border-teal-500/15 px-3 sm:px-5"
+        style={{
+          paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))",
+          background: "linear-gradient(180deg, rgba(4,13,24,0.97) 0%, #020810 100%)",
+        }}
+      >
+        <BusinessInfoFooter
+          variant="dark"
+          compact
+          className="!mt-0 border-0 !pt-2.5 pb-1.5"
         />
       </div>
     </div>

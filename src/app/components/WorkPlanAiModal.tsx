@@ -155,7 +155,6 @@ export function WorkPlanAiModal({
             >
               저장
             </button>
-            <span className="text-[10px] text-white/40">이 PC 브라우저에만 저장됩니다.</span>
             {savedHint ? (
               <span className="text-[10px] font-medium text-teal-300">저장됨</span>
             ) : null}
@@ -164,11 +163,7 @@ export function WorkPlanAiModal({
             <p className="mt-1.5 text-[10px] leading-snug text-cyan-200/55">
               저장 시 위 메모가 AI 보조 한 줄에 반영되도록 다시 분석합니다.
             </p>
-          ) : (
-            <p className="mt-1.5 text-[10px] leading-snug text-white/40">
-              Groq 키가 없으면 메모만 저장되며, 아래 참고 문구는 예보·안전레벨 기준입니다.
-            </p>
-          )}
+          ) : null}
         </div>
 
         <div
@@ -198,15 +193,6 @@ export function WorkPlanAiModal({
             <div className="flex min-h-[1.375rem] items-center justify-center text-center text-[11px] text-cyan-200/60">
               {aiLoading && groqConfigured ? "보조 문구 생성 중…" : "\u00a0"}
             </div>
-
-            {!groqConfigured && (
-              <p
-                className="rounded-lg px-2.5 py-2 text-[11px] leading-snug text-white/50"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(64,224,208,0.12)" }}
-              >
-                API 키가 없을 때는 위 항목만 표시됩니다. Groq 키를 설정하면 짧은 보조 설명이 추가됩니다.
-              </p>
-            )}
 
             {ai?.caution ? (
               <p className="rounded-lg border border-amber-500/20 bg-amber-950/20 px-2.5 py-2 text-[11px] leading-snug text-amber-200/80">
