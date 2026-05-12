@@ -910,6 +910,8 @@ export default function Dashboard() {
 
   const wpIdx        = useRef(0);
   const counter      = useRef(1000 + INITIAL_SEED_COUNT + 1);
+  /** 실시간 GNSS 모드에서「테스트 살포」라벨 순번 (금일·세션 구분용) */
+  const gpsTestDropSeqRef = useRef(0);
   const zoneCounts   = useRef<Record<"A"|"B"|"C", number>>({ ...INIT_ZONE_COUNTS });
   const dropsDbReady = useRef(!marineDbEnabled());
   const logRef = useRef<HTMLDivElement>(null);
@@ -1153,6 +1155,11 @@ export default function Dashboard() {
       hadGpsFixForFitRef.current = false;
     }
   }, [mapMode, gpsVessel]);
+
+  /** 테스트 살포 라벨 순번 — GNSS 모드를 끄면 다음 실시간 진입 시 01부터 다시 매김 */
+  useEffect(() => {
+    if (mapMode !== "real") gpsTestDropSeqRef.current = 0;
+  }, [mapMode]);
 
   useEffect(() => {
     if (!lteFollowEnabled) setLteTrackPoints([]);
@@ -1659,6 +1666,44 @@ export default function Dashboard() {
     }
     setMapFitNonce((n) => n + 1);
   }, [mapMode, applyGeolocationCoords]);
+
+  /** 실시간 내 위치(GNSS) 모드: 현재 좌표에 살포 1건 시험 기록 — 클릭당 1건, 금일 날짜·시각·위경도 반영 */
+  const handleGpsTestSeedDrop = useCallback(() => {
+    if (mapMode !== "real" || !gpsVessel) return;
+    counter.current += 1;
+    const recordedAt = Date.now();
+    gpsTestDropSeqRef.current += 1;
+    const seq = gpsTestDropSeqRef.current;
+    const ymd = ymdLocal(new Date(recordedAt));
+    const jitter = () => (Math.random() - 0.5) * 0.00006;
+    const newDrop: SeedDrop = {
+      id: String(counter.current).padStart(4, "0"),
+      label: `GNSS-${ymd}-${String(seq).padStart(2, "0")}`,
+      time: fmt(new Date(recordedAt)),
+      lat: parseFloat((gpsVessel.lat + jitter()).toFixed(6)),
+      lng: parseFloat((gpsVessel.lng + jitter()).toFixed(6)),
+      status: "성공",
+      recordedAt,
+    };
+    setDrops((d) => {
+      const next = [...d, newDrop].slice(-80);
+      if (marineDbEnabled() && dropsDbReady.current) {
+        void upsertSeedDropRecord({
+          id: newDrop.id,
+          label: newDrop.label,
+          time: newDrop.time,
+          lat: newDrop.lat,
+          lng: newDrop.lng,
+          status: newDrop.status,
+          recordedAt: newDrop.recordedAt,
+          verificationMismatch: newDrop.verificationMismatch,
+        });
+      }
+      return next;
+    });
+    setPositionReportToast("테스트 살포 1건을 현재 GNSS 위치·금일 시각으로 기록했습니다.");
+    window.setTimeout(() => setPositionReportToast(null), 3200);
+  }, [mapMode, gpsVessel]);
 
   // Mouse wheel zoom
   useEffect(() => {
@@ -2738,6 +2783,17 @@ export default function Dashboard() {
               />
               <span className="leading-none">내 위치 찾기</span>
             </button>
+            {isRealWithGps ? (
+              <button
+                type="button"
+                onClick={handleGpsTestSeedDrop}
+                title="현재 GNSS 좌표에 종자 살포 1건을 시험 기록합니다. 누를 때마다 1건씩 추가됩니다."
+                className="flex items-center gap-2.5 rounded-lg border border-emerald-400/55 bg-emerald-600/90 px-3.5 py-2.5 text-[11px] font-semibold tracking-tight text-[#041c2e] shadow-lg backdrop-blur-sm transition-colors hover:bg-emerald-500"
+              >
+                <Droplets className="h-[18px] w-[18px] shrink-0 stroke-[2.25]" aria-hidden />
+                <span className="leading-none">테스트 살포 1건</span>
+              </button>
+            ) : null}
             {mapMode === "real" && !gpsError && !gpsVessel ? (
               <p className="max-w-[14rem] rounded-md border border-cyan-500/30 bg-[#041c2e]/90 px-2 py-1 text-[10px] text-cyan-100/90 shadow-md">
                 위치 권한을 허용하면 지도가 내 위치로 이동합니다.

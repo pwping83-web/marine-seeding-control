@@ -29,7 +29,8 @@ export function AiTicker({
   const att = attachmentCue.trim();
   const attPart = att ? ` · 🌱 ${att}` : "";
   const segment = `${vesselName} · ${base}${extra}${attPart}`;
-  const scrollSec = 22;
+  /** 긴 문구는 스크롤 구간을 늘려 끝까지 지나가게 함 (모바일 좁은 폭에서 특히) */
+  const scrollSec = Math.max(26, Math.min(56, 18 + segment.length * 0.072));
   const pauseSec = 30;
   const cycleSec = scrollSec + pauseSec;
   const scrollEndPct = (scrollSec / cycleSec) * 100;
@@ -46,13 +47,16 @@ export function AiTicker({
     >
       <style>{`
         @keyframes aiTickerCycle {
-          0% { transform: translateX(100%); }
-          ${scrollEndPct.toFixed(3)}% { transform: translateX(-100%); }
-          100% { transform: translateX(-100%); }
+          /* 100vw: 화면 오른쪽 밖에서 입장 — %만 쓰면 요소 너비 오인 시 짧게 끊김 */
+          0% { transform: translateX(100vw); }
+          ${scrollEndPct.toFixed(3)}% { transform: translateX(calc(-100% - 100vw - 1.5rem)); }
+          100% { transform: translateX(calc(-100% - 100vw - 1.5rem)); }
         }
         .ai-marquee-track {
           display: inline-block;
+          width: max-content;
           max-width: none;
+          flex-shrink: 0;
           white-space: nowrap;
           padding-left: 1rem;
           padding-right: 1rem;
