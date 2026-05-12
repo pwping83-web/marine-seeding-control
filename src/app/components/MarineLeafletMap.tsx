@@ -41,6 +41,7 @@ export type MarineLeafletDrop = {
   highlight: boolean;
 };
 
+/** `ship`: 시뮬 선박(주황 선체). `gpsDot`: 실시간 내 위치(GPS) — 빨간 선체·물결 링(모바일과 동일). */
 export type VesselMarkerVariant = "ship" | "gpsDot";
 
 type Props = {
@@ -55,8 +56,10 @@ type Props = {
   drops: MarineLeafletDrop[];
   vessel: { lat: number; lng: number; heading: number };
   pathLatLng: [number, number][];
-  /** 실제 GPS 등: 선박 아이콘 대신 점 + 물결 링만 */
+  /** 실제 GPS: 빨간 배 실루엣 + 물결 링(모바일 함정과 동일 스타일) */
   vesselMarkerVariant?: VesselMarkerVariant;
+  /** 살포 시작 후 — 선박 마커를 살포 시작 버튼과 같은 녹색 톤으로 */
+  vesselSeedingActive?: boolean;
   /** 위치 갱신 시 지도 중심을 선박에 맞춰 패닝(마커가 화면 밖으로 나가지 않게) */
   panMapToVesselOnMove?: boolean;
   /** true면 fitBounds에 살포·항적을 넣지 않고 선박 위치만 사용(실제 모드 초기 맞춤) */
@@ -171,26 +174,34 @@ function DisableScrollWheelZoom() {
 function VesselMarker({
   vessel,
   variant,
+  seedingActive,
 }: {
   vessel: { lat: number; lng: number; heading: number };
   variant: VesselMarkerVariant;
+  seedingActive: boolean;
 }) {
   const icon = useMemo(() => {
     if (variant === "gpsDot") {
+      const pinCls = seedingActive
+        ? "marine-gps-ownship-pin marine-gps-ownship-pin--seeding"
+        : "marine-gps-ownship-pin";
       return L.divIcon({
-        className: "marine-vessel-divicon",
-        html: `<div class="marine-gps-pin"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-gps-dot-core"></div></div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        className: "marine-gps-ownship-divicon",
+        html: `<div class="${pinCls}" style="transform:rotate(${vessel.heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div>`,
+        iconSize: [32, 40],
+        iconAnchor: [16, 20],
       });
     }
+    const pinCls = seedingActive
+      ? "marine-vessel-pin marine-vessel-pin--seeding"
+      : "marine-vessel-pin";
     return L.divIcon({
       className: "marine-vessel-divicon",
-      html: `<div class="marine-vessel-pin" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-vessel-hull"></div></div>`,
+      html: `<div class="${pinCls}" style="transform:rotate(${vessel.heading}deg)"><div class="marine-vessel-signals" aria-hidden="true"><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span><span class="marine-vessel-signal-ring"></span></div><div class="marine-vessel-hull"></div></div>`,
       iconSize: [32, 40],
       iconAnchor: [16, 20],
     });
-  }, [vessel.heading, variant]);
+  }, [vessel.heading, variant, seedingActive]);
 
   return (
     <Marker position={L.latLng(vessel.lat, vessel.lng)} icon={icon} zIndexOffset={800}>
@@ -237,6 +248,7 @@ export function MarineLeafletMap({
   vessel,
   pathLatLng,
   vesselMarkerVariant = "ship",
+  vesselSeedingActive = false,
   panMapToVesselOnMove = false,
   fitToVesselOnly = false,
   hideVesselMarker = false,
@@ -410,7 +422,13 @@ export function MarineLeafletMap({
         </CircleMarker>
       ))}
 
-      {hideVesselMarker ? null : <VesselMarker vessel={vessel} variant={vesselMarkerVariant} />}
+      {hideVesselMarker ? null : (
+        <VesselMarker
+          vessel={vessel}
+          variant={vesselMarkerVariant}
+          seedingActive={vesselSeedingActive}
+        />
+      )}
     </MapContainer>
   );
 }

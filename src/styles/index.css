@@ -54,27 +54,6 @@
   justify-content: center;
 }
 
-/* 실제 GPS 모드: 배 형상 없이 중심 점 + 물결 링만 */
-.marine-gps-pin {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.marine-gps-dot-core {
-  position: relative;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);
-  border: 2px solid #fff;
-  box-shadow: 0 0 6px rgba(34, 211, 238, 0.9);
-}
-
 /* 선박 위치 — AIS/레이더 비콘 스타일 확산 신호 */
 .marine-vessel-signals {
   position: absolute;
@@ -145,6 +124,146 @@
     box-shadow:
       0 0 10px rgba(255, 138, 31, 0.85),
       0 0 12px 3px rgba(64, 224, 208, 0.35);
+  }
+}
+
+/* 살포 중 — 시뮬 선박 마커(살포 시작 버튼 #10b981 계열) */
+.marine-vessel-pin--seeding .marine-vessel-signal-ring {
+  border-color: rgba(52, 211, 153, 0.88);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.marine-vessel-pin--seeding .marine-vessel-hull {
+  background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  box-shadow:
+    0 0 8px rgba(16, 185, 129, 0.7),
+    0 0 0 0 rgba(52, 211, 153, 0.5);
+  animation: marine-vessel-nav-blink-seeding 2.4s ease-in-out infinite;
+}
+
+@keyframes marine-vessel-nav-blink-seeding {
+  0%,
+  100% {
+    box-shadow:
+      0 0 8px rgba(16, 185, 129, 0.75),
+      0 0 0 0 rgba(52, 211, 153, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(110, 231, 183, 0.9),
+      0 0 12px 3px rgba(5, 150, 105, 0.35);
+  }
+}
+
+/* 실시간 내 위치(GPS) — PC 관제·모바일 함정 공통: 빨간 배 실루엣 + 물결 링 */
+.marine-gps-ownship-divicon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.marine-gps-ownship-pin {
+  position: relative;
+  width: 32px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marine-gps-ownship-signals {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.marine-gps-ownship-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border: 2px solid rgba(248, 113, 113, 0.85);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.55);
+  animation: marine-gps-ownship-signal-out 6.5s ease-out infinite;
+}
+
+.marine-gps-ownship-ring:nth-child(2) {
+  animation-delay: 2.17s;
+}
+
+.marine-gps-ownship-ring:nth-child(3) {
+  animation-delay: 4.33s;
+}
+
+@keyframes marine-gps-ownship-signal-out {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(3.6);
+    opacity: 0;
+  }
+}
+
+.marine-gps-ownship-hull {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 22px;
+  margin-top: -4px;
+  background: linear-gradient(180deg, #f87171 0%, #b91c1c 100%);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 45% 45%;
+  box-shadow:
+    0 0 10px rgba(248, 113, 113, 0.85),
+    0 0 0 0 rgba(239, 68, 68, 0.45);
+  animation: marine-gps-ownship-nav-blink 6s ease-in-out infinite;
+}
+
+@keyframes marine-gps-ownship-nav-blink {
+  0%,
+  100% {
+    box-shadow:
+      0 0 10px rgba(248, 113, 113, 0.85),
+      0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 14px rgba(252, 165, 165, 0.95),
+      0 0 14px 4px rgba(220, 38, 38, 0.35);
+  }
+}
+
+/* 살포 중 — GPS 마커도 살포 시작 버튼과 동일 녹색 톤 */
+.marine-gps-ownship-pin--seeding .marine-gps-ownship-ring {
+  border-color: rgba(52, 211, 153, 0.9);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.55);
+}
+
+.marine-gps-ownship-pin--seeding .marine-gps-ownship-hull {
+  background: linear-gradient(180deg, #34d399 0%, #047857 100%);
+  animation: marine-gps-ownship-nav-blink-seeding 6s ease-in-out infinite;
+}
+
+@keyframes marine-gps-ownship-nav-blink-seeding {
+  0%,
+  100% {
+    box-shadow:
+      0 0 10px rgba(52, 211, 153, 0.85),
+      0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 14px rgba(110, 231, 183, 0.95),
+      0 0 14px 4px rgba(5, 150, 105, 0.35);
   }
 }
 

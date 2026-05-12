@@ -2531,6 +2531,7 @@ export default function Dashboard() {
                   pathLatLng={[]}
                   ltePathLatLng={[]}
                   vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
+                  vesselSeedingActive={seedingActive}
                   panMapToVesselOnMove={false}
                   fitToVesselOnly={false}
                   hideVesselMarker={awaitingGps}
@@ -2581,6 +2582,7 @@ export default function Dashboard() {
               ltePathLatLng={lteFollowEnabled ? ltePathLatLng : []}
               replayTrackPathLatLng={showTodayTrackReplayOnMap ? todayReplayTrackPath : []}
               vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
+              vesselSeedingActive={seedingActive}
               panMapToVesselOnMove={isRealWithGps || (lteFollowEnabled && lteRemoteFresh && mapMode === "test")}
               fitToVesselOnly={isRealWithGps}
               hideVesselMarker={awaitingGps}

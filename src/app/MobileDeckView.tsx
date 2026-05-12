@@ -5,7 +5,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import L from "leaflet";
 import {
   Brain,
   CircleSlash,
@@ -68,6 +69,16 @@ function canUseBrowserGeolocation(): boolean {
   return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
 }
 
+function posFromGeolocationCoords(c: GeolocationCoordinates): {
+  lat: number;
+  lng: number;
+  heading: number;
+} {
+  const h = c.heading;
+  const heading = typeof h === "number" && !Number.isNaN(h) ? h : 0;
+  return { lat: c.latitude, lng: c.longitude, heading };
+}
+
 function MapFollowUser({
   lat,
   lng,
@@ -87,7 +98,7 @@ function MapFollowUser({
 }
 
 export default function MobileDeckView() {
-  const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [pos, setPos] = useState<{ lat: number; lng: number; heading: number } | null>(null);
   const [geoErr, setGeoErr] = useState<string | null>(null);
   const [seedingActive, setSeedingActive] = useState(false);
   const [sending, setSending] = useState(false);
@@ -199,7 +210,7 @@ export default function MobileDeckView() {
     const applyCoords = (c: GeolocationCoordinates) => {
       if (cancelled) return;
       setGeoErr(null);
-      setPos({ lat: c.latitude, lng: c.longitude });
+      setPos(posFromGeolocationCoords(c));
       if (!firstGpsCenterRef.current) {
         firstGpsCenterRef.current = true;
         setRecenterNonce((n) => n + 1);
@@ -241,7 +252,7 @@ export default function MobileDeckView() {
     navigator.geolocation.getCurrentPosition(
       (p) => {
         setGeoErr(null);
-        setPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+        setPos(posFromGeolocationCoords(p.coords));
         setRecenterNonce((n) => n + 1);
         setLocating(false);
       },
@@ -420,6 +431,19 @@ export default function MobileDeckView() {
   const padIconShell =
     "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-white/12";
 
+  const ownShipIcon = useMemo(() => {
+    if (!pos) return null;
+    const pinCls = seedingActive
+      ? "marine-gps-ownship-pin marine-gps-ownship-pin--seeding"
+      : "marine-gps-ownship-pin";
+    return L.divIcon({
+      className: "marine-gps-ownship-divicon",
+      html: `<div class="${pinCls}" style="transform:rotate(${pos.heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div>`,
+      iconSize: [32, 40],
+      iconAnchor: [16, 20],
+    });
+  }, [pos, seedingActive]);
+
   return (
     <div className="flex h-svh min-h-0 flex-col bg-[#050f18] text-slate-100">
       <header
@@ -476,18 +500,9 @@ export default function MobileDeckView() {
           attributionControl
         >
           <TileLayer attribution={TILE_ATTR} url={TILE_CARTO_DARK} />
-          {pos ? (
+          {pos && ownShipIcon ? (
             <>
-              <CircleMarker
-                center={[pos.lat, pos.lng]}
-                radius={11}
-                pathOptions={{
-                  color: "#22d3ee",
-                  fillColor: "#06b6d4",
-                  fillOpacity: 0.85,
-                  weight: 2,
-                }}
-              />
+              <Marker position={[pos.lat, pos.lng]} icon={ownShipIcon} zIndexOffset={900} />
               <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} recenterNonce={recenterNonce} />
             </>
           ) : null}
