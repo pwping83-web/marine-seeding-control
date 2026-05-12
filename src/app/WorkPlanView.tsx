@@ -1,8 +1,8 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import {
   AlertCircle, CheckCircle2, XCircle, Wind, Eye, Droplets,
   Thermometer, ChevronDown, ChevronUp, MapPin, Ship, Clock,
-  Plus, X, CalendarPlus, Ban,
+  Plus, X, CalendarPlus, Ban, RefreshCw,
 } from "lucide-react";
 import type { WorkEntry } from "./work-plan-types";
 import {
@@ -13,6 +13,15 @@ import {
   replaceWeatherForecastDays,
   seedWorkReservations,
 } from "@/lib/marine-db";
+import {
+  fetchKmaMiddleTermForecast,
+  kmaMidTermPollMs,
+  generateMockMiddleTerm,
+  middleTermToForecastWeather,
+  type MiddleTermFcstDay,
+} from "@/lib/kma-weather";
+
+const MID_TERM_POLL_MS = kmaMidTermPollMs();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -341,6 +350,33 @@ export default function WorkPlanView({
   const [showAddModal,  setShowAddModal]  = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
 
+  // ── 중기예보 상태 ──────────────────────────────────────────────────────────
+  const [midTermSlots, setMidTermSlots]   = useState<MiddleTermFcstDay[]>([]);
+  const [midTermMock,  setMidTermMock]    = useState(false);
+  const [midTermLoading, setMidTermLoading] = useState(false);
+
+  const loadMidTerm = useCallback(async () => {
+    setMidTermLoading(true);
+    try {
+      const result = await fetchKmaMiddleTermForecast();
+      if (result && result.length > 0) {
+        setMidTermSlots(result);
+        setMidTermMock(false);
+      } else {
+        setMidTermSlots(generateMockMiddleTerm());
+        setMidTermMock(true);
+      }
+    } finally {
+      setMidTermLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMidTerm();
+    const id = setInterval(loadMidTerm, MID_TERM_POLL_MS);
+    return () => clearInterval(id);
+  }, [loadMidTerm]);
+
   useEffect(() => {
     if (!marineDbEnabled()) {
       setScheduleReady(true);
@@ -370,7 +406,44 @@ export default function WorkPlanView({
     };
   }, []);
 
-  const forecast = useMemo(() => buildForecast(weather), [weather.windSpeed]);
+  // 단기(D+0~D+2)는 기존 buildForecast, 중기(D+3~D+10)는 API 데이터로 합성
+  const forecast = useMemo(() => {
+    const base = buildForecast(weather); // D+0~D+6 (7일)
+    if (midTermSlots.length === 0) return base;
+
+    const midMap = new Map<string, MiddleTermFcstDay>();
+    midTermSlots.forEach((m) => midMap.set(m.date, m));
+
+    return base.map((f) => {
+      const ymd = `${f.date.getFullYear()}-${String(f.date.getMonth() + 1).padStart(2, "0")}-${String(f.date.getDate()).padStart(2, "0")}`;
+      const mid = midMap.get(ymd);
+      if (!mid) return f;
+      const mw = middleTermToForecastWeather(mid);
+      const reasons: string[] = [];
+      const ws = mw.windSpeed;
+      const wh = mw.waveHeight;
+      const vis = mw.visibility;
+      const pr = mw.precipitation;
+      if (ws   > WIND_LIMIT)   reasons.push(`풍속 ${ws.toFixed(0)} kt 초과(중기)`);
+      if (wh   > WAVE_LIMIT)   reasons.push(`파고 ${wh.toFixed(1)} m 초과(중기)`);
+      if (vis  < VIS_LIMIT)    reasons.push(`시정 ${vis.toFixed(0)} km 미달(중기)`);
+      if (pr   > PRECIP_LIMIT) reasons.push(`강수(중기)`);
+      const status: ForecastDay["status"] =
+        reasons.length === 0 ? "ok" : ws <= 22 && wh <= 2.8 ? "caution" : "impossible";
+      return {
+        ...f,
+        windSpeed: ws,
+        windGust: mw.windGust,
+        waveHeight: wh,
+        visibility: vis,
+        temp: mw.temp,
+        precipitation: mw.precipitation,
+        status,
+        reasons,
+      };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weather.windSpeed, midTermSlots]);
 
   useEffect(() => {
     if (!marineDbEnabled() || !scheduleReady || forecast.length === 0) return;
@@ -577,7 +650,28 @@ export default function WorkPlanView({
 
       {/* ── 2. 7일 기상 예보 (compact + click to expand) ─────────────── */}
       <div className="shrink-0">
-        <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold mb-1.5 sm:mb-2">7일 기상 예보</p>
+        <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+          <p className="text-[10px] text-white/35 tracking-widest uppercase font-bold">7일 기상 예보</p>
+          <div className="flex items-center gap-1.5">
+            {midTermMock ? (
+              <span className="rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ background: "rgba(251,191,36,0.12)", color: "#fcd34d", border: "1px solid rgba(251,191,36,0.3)" }}>
+                시연
+              </span>
+            ) : (
+              <span className="rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ background: "rgba(16,185,129,0.12)", color: "#6ee7b7", border: "1px solid rgba(16,185,129,0.25)" }}>
+                기상청 중기예보
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => void loadMidTerm()}
+              title="중기예보 새로고침"
+              className="text-white/25 hover:text-white/60 transition-colors"
+            >
+              <RefreshCw className={`w-3 h-3 ${midTermLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
 
         {/* Compact day pills */}
         <div className="grid grid-cols-7 gap-1.5 sm:gap-2">

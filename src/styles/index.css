@@ -222,3 +222,48 @@
     box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.4);
   }
 }
+
+/* ─── 인쇄(PDF) 전용 스타일 ───────────────────────────────────────────────── */
+@media print {
+  /* 모달 오버레이·배경 숨기고 보고서 본문만 출력 */
+  body > * { display: none !important; }
+
+  /* 보고서 모달 본문만 표시 */
+  .print-report-modal {
+    display: block !important;
+    position: static !important;
+    inset: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 12pt !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 16pt !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* 닫기·출력 버튼 숨김 */
+  .print-hide { display: none !important; }
+
+  /* 다크 배경·테두리 초기화 */
+  .print-report-modal * {
+    background: transparent !important;
+    border-color: #ccc !important;
+    color: #111 !important;
+    box-shadow: none !important;
+  }
+
+  /* 표·목록 테두리 보이게 */
+  .print-report-modal table { border-collapse: collapse; width: 100%; }
+  .print-report-modal td, .print-report-modal th {
+    border: 1px solid #ccc;
+    padding: 4pt 6pt;
+    font-size: 10pt;
+  }
+
+  /* 페이지 여백 */
+  @page { margin: 16mm 14mm; }
+}

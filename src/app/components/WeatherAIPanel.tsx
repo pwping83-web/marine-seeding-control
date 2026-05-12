@@ -2,7 +2,7 @@
  * AI 기상 분석 패널
  *
  * 기능:
- *  1. 기상청 Open API(단기예보) 폴링 → 없으면 목업 데이터
+ *  1. 기상청 Open API(단기예보) 폴링·탭 복귀 시 재조회 → 없으면 목업 데이터
  *  2. AI 출항 가능 시간대 자동 산정 (scoreHourSlot + buildDeparturePlan)
  *  3. 실시간 기상 악화 감지 → 긴급 회항 콜백 발생 (assessEmergency)
  *
@@ -26,8 +26,13 @@ import {
 import {
   assessEmergency,
   buildDeparturePlan,
+  estimatedVisibilityKmFromSlot,
   fetchKmaForecast,
   generateMockForecast,
+  kmaForecastPollMs,
+  kmaRealtimeCheckMs,
+  pickCurrentOrNextKmaSlot,
+  sortKmaSlotsByTime,
   type DeparturePlan,
   type EmergencyAssessment,
   type KmaHourSlot,
@@ -38,10 +43,10 @@ import {
   type GroqWeatherReport,
 } from "@/lib/groq-weather";
 
-// ─── 폴링 주기 (ms) ──────────────────────────────────────────────────────────
-const FORECAST_POLL_MS  = 10 * 60 * 1000; // 10분
-const REALTIME_CHECK_MS = 60 * 1000;       // 1분 (현재 기상 재평가)
-const GROQ_DEBOUNCE_MS  = 8 * 1000;        // Groq 호출 최소 간격
+// ─── 폴링 주기 (ms) — kma-weather.ts 기본값 + VITE_KMA_*_POLL_MS 로 조절 ───
+const FORECAST_POLL_MS = kmaForecastPollMs();
+const REALTIME_CHECK_MS = kmaRealtimeCheckMs();
+const GROQ_DEBOUNCE_MS = 8 * 1000; // Groq 호출 최소 간격
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -123,8 +128,10 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
       let fetched = await fetchKmaForecast();
       let mock = false;
       if (!fetched || fetched.length === 0) {
-        fetched = generateMockForecast();
+        fetched = sortKmaSlotsByTime(generateMockForecast());
         mock = true;
+      } else {
+        fetched = sortKmaSlotsByTime(fetched);
       }
       const newPlan = buildDeparturePlan(fetched);
       setSlots(fetched);
@@ -144,11 +151,21 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
     return () => clearInterval(id);
   }, [loadForecast]);
 
+  // 브라우저 탭 복귀 시 즉시 재조회(항차·관제 화면 복귀 시 stale 완화)
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadForecast();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadForecast]);
+
   // ─── 긴급 회항 실시간 체크 ─────────────────────────────────────────────────
   useEffect(() => {
     function evaluate() {
-      // 실측값이 있으면 우선, 없으면 예보 최신 슬롯
-      const src = liveWeather ?? slots[0];
+      // 실측값이 있으면 우선, 없으면 현재 시각에 가장 가까운 예보 슬롯
+      const nowSlot = pickCurrentOrNextKmaSlot(slots);
+      const src = liveWeather ?? nowSlot;
       if (!src) return;
 
       const assessment = assessEmergency({
@@ -190,7 +207,10 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
             waveHeight: "waveHeight" in src ? (src as KmaHourSlot).waveHeight : liveWeather?.waveHeight ?? 0,
             temp: "temp" in src ? (src as KmaHourSlot).temp : liveWeather?.temp ?? 15,
             pop: "pop" in src ? (src as KmaHourSlot).pop : liveWeather?.pop ?? 0,
-            visibility: 10,
+            visibility:
+              "sky" in src && "ptyCode" in src && "pop" in src
+                ? estimatedVisibilityKmFromSlot(src as KmaHourSlot)
+                : 10,
             assessment,
             minutesToDanger,
           }).then((report) => {
@@ -206,11 +226,11 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
     evaluate();
     const id = setInterval(evaluate, REALTIME_CHECK_MS);
     return () => clearInterval(id);
-  }, [slots, plan, liveWeather, onEmergencyReturn, onSafetyLevelChange]);
+  }, [slots, plan, liveWeather, onEmergencyReturn, onSafetyLevelChange, onGroqSummaryChange]);
 
   // ─── 렌더 ──────────────────────────────────────────────────────────────────
 
-  const nowSlot = slots[0];
+  const nowSlot = pickCurrentOrNextKmaSlot(slots);
 
   // 현재 기상 소스: 실측값 우선, 없으면 예보 첫 슬롯
   const liveWind   = liveWeather?.windSpeed  ?? nowSlot?.windSpeed  ?? 0;

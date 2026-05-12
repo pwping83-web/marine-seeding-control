@@ -14,6 +14,8 @@
  *   G2B_NTFY_TOPIC — 설정 시 https://ntfy.sh/{토픽} 으로도 동일 본문 POST (웹훅 없이 스마트폰 알림용)
  *   G2B_FIRST_RUN_SEED_ONLY — 기본 1. 상태 파일이 비어 있으면 이번 조회분만 저장하고 알림은 보내지 않음(첫날 대량 알림 방지). 0 이면 첫 실행부터 알림
  *   G2B_BID_TYPES — 쉼표 구분: servc(용역), thng(물품), cnstwk(공사). 기본 servc,thng,cnstwk 전부
+ *   G2B_API_BASE — API 베이스 URL(끝에 슬래시 없음). 포털 문서(1.2) 기준 기본값과 동일.
+ *     구버전 End Point만 쓰는 환경이면 G2B_API_BASE=https://apis.data.go.kr/1230000/BidPublicInfoService
  *
  * 실행: pnpm run g2b:watch
  * Windows 3일마다 15시: scripts/Register-G2bWatchScheduledTask.ps1 등록 후 매일 15시 래퍼 실행(내부 3일 간격)
@@ -26,7 +28,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const BASE = "https://apis.data.go.kr/1230000/BidPublicInfoService";
+const BASE = (
+  process.env.G2B_API_BASE?.trim().replace(/\/$/, "") ||
+  "https://apis.data.go.kr/1230000/ad/BidPublicInfoService"
+);
 
 /** 조달청 입찰공고정보서비스 매뉴얼: 입찰공고목록 정보에 대한 용역/물품/공사 조회 */
 const OP_BY_KIND = {
@@ -240,16 +245,24 @@ function chunkStrings(lines, maxLen) {
 }
 
 async function main() {
-  const serviceKey = env("DATA_GO_KR_SERVICE_KEY");
-  const webhook = env("G2B_NOTIFY_WEBHOOK_URL");
-  const ntfyTopic = env("G2B_NTFY_TOPIC");
-
+  const serviceKey = env("DATA_GO_KR_SERVICE_KEY") || env("VITE_KMA_SERVICE_KEY");
   if (!serviceKey) {
-    console.error("DATA_GO_KR_SERVICE_KEY 가 없습니다. 공공데이터포털에서 '나라장터 입찰공고' API 키를 발급한 뒤 .env 에 넣으세요.");
+    console.error(
+      "DATA_GO_KR_SERVICE_KEY(또는 동일 키를 VITE_KMA_SERVICE_KEY)가 없습니다. .env 에 공공데이터포털 일반 인증키를 넣으세요.",
+    );
     process.exit(1);
   }
-  if (!webhook && !ntfyTopic) {
-    console.error("G2B_NOTIFY_WEBHOOK_URL 또는 G2B_NTFY_TOPIC 중 하나는 필요합니다.");
+  if (!env("DATA_GO_KR_SERVICE_KEY") && env("VITE_KMA_SERVICE_KEY")) {
+    console.warn("[g2b] DATA_GO_KR_SERVICE_KEY 없음 → VITE_KMA_SERVICE_KEY 로 조회합니다(동일 인증키 가정).");
+  }
+  const webhook = env("G2B_NOTIFY_WEBHOOK_URL");
+  const ntfyTopic = env("G2B_NTFY_TOPIC");
+  const skipNotify = env("G2B_SKIP_NOTIFY", "0") === "1";
+
+  if (!webhook && !ntfyTopic && !skipNotify) {
+    console.error(
+      "G2B_NOTIFY_WEBHOOK_URL 또는 G2B_NTFY_TOPIC 중 하나가 필요합니다. 알림 없이 API만 시험하려면 G2B_SKIP_NOTIFY=1 을 설정하세요.",
+    );
     process.exit(1);
   }
 
@@ -341,6 +354,9 @@ async function main() {
   if (ntfyTopic) {
     await postNtfy(ntfyTopic, header, fullText.slice(0, 3900));
   }
+  if (!webhook && !ntfyTopic && skipNotify) {
+    console.log(`G2B_SKIP_NOTIFY=1: ${fresh.length}건 알림 생략(조회·상태 저장만).`);
+  }
 
   for (const { id } of fresh) seen.add(id);
   for (const { row, kind } of rows) {
@@ -349,7 +365,11 @@ async function main() {
   }
   saveState(stateFile, seen);
 
-  console.log(`알림 전송 완료: ${fresh.length}건`);
+  if (webhook || ntfyTopic) {
+    console.log(`알림 전송 완료: ${fresh.length}건`);
+  } else if (!skipNotify) {
+    console.log("완료");
+  }
 }
 
 main().catch((e) => {

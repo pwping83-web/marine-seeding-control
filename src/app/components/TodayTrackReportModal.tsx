@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -8,6 +8,7 @@ import {
   Eye,
   FileSpreadsheet,
   List,
+  Printer,
   Sun,
   Thermometer,
   Waves,
@@ -174,6 +175,7 @@ export function TodayTrackReportModal({
   const [openSummary, setOpenSummary] = useState(true);
   const [openRoute, setOpenRoute] = useState(false);
   const [openEval, setOpenEval] = useState(true);
+  const printRef = useRef<HTMLDivElement>(null);
 
   const rangeNorm = useMemo(() => {
     let a = rangeStart;
@@ -332,7 +334,7 @@ export function TodayTrackReportModal({
       onClick={onClose}
     >
       <div
-        className="relative flex w-full max-w-lg min-h-0 flex-col self-start rounded-xl shadow-2xl max-h-[min(calc(100dvh-3rem),40rem)] sm:max-w-xl"
+        className="print-report-modal relative flex w-full max-w-lg min-h-0 flex-col self-start rounded-xl shadow-2xl max-h-[min(calc(100dvh-3rem),40rem)] sm:max-w-xl"
         style={{
           background: "linear-gradient(160deg, #0c2748 0%, #081b34 100%)",
           border: "1px solid rgba(64,224,208,0.22)",
@@ -497,14 +499,33 @@ export function TodayTrackReportModal({
           </div>
         </div>
 
-        <div className="shrink-0 border-t px-3 py-2.5 sm:px-4" style={{ borderColor: "rgba(64,224,208,0.12)", background: "rgba(0,0,0,0.18)" }}>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.08] py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/[0.12]"
-          >
-            닫기
-          </button>
+        <div className="print-hide shrink-0 border-t px-3 py-2.5 sm:px-4" style={{ borderColor: "rgba(64,224,208,0.12)", background: "rgba(0,0,0,0.18)" }}>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenSummary(true);
+                setOpenRoute(true);
+                setOpenEval(true);
+                setTimeout(() => window.print(), 80);
+              }}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold text-teal-100 transition-colors hover:bg-teal-900/30"
+              style={{ borderColor: "rgba(45,212,191,0.35)", background: "rgba(45,212,191,0.08)" }}
+            >
+              <Printer className="h-4 w-4 shrink-0" aria-hidden />
+              PDF 출력
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.08] py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/[0.12]"
+            >
+              닫기
+            </button>
+          </div>
+          <p className="mt-1.5 text-center text-[10px] text-white/30">
+            인쇄 대화상자에서 「PDF로 저장」을 선택하면 보고서 파일이 만들어집니다.
+          </p>
         </div>
       </div>
     </div>

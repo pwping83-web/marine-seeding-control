@@ -5,10 +5,14 @@
  *   import { fetchKmaForecast, scoreHourSlot, buildDeparturePlan, assessEmergency } from "@/lib/kma-weather";
  *
  * 환경변수 (.env):
- *   VITE_KMA_SERVICE_KEY  — 공공데이터포털 기상청 초단기예보/단기예보 API 인증키(URL인코딩 값)
+ *   VITE_KMA_SERVICE_KEY  — 공공데이터포털 기상청 일반 인증키(단기 VilageFcstInfoService_2.0·중기 MidFcstInfoService 등 동일 키, 포털 안내에 맞는 Encoding/Decoding 값)
  *   VITE_KMA_NX / VITE_KMA_NY  — 기상청 격자 좌표(기본: 남해안 권역 58, 74)
+ *   VITE_KMA_FORECAST_POLL_MS   — 단기예보 재조회 주기(ms). 기본 480000(8분), 3~30분으로 클램프
+ *   VITE_KMA_REALTIME_CHECK_MS  — 긴급·주의 재평가(ms). 기본 45000(45초), 15~120초로 클램프
+ *   VITE_KMA_MID_POLL_MS        — 중기예보 재조회(ms). 기본 21600000(6시간), 2~12시간으로 클램프
  *
- * API 문서: https://www.data.go.kr/data/15084084/openapi.do (기상청 단기예보)
+ * 참고: 중기예보 End Point는 https://apis.data.go.kr/1360000/MidFcstInfoService (가이드 251212 등)
+ * 단기: https://www.data.go.kr/data/15084084/openapi.do
  */
 
 // ─── 기상 한 시간 슬롯 ────────────────────────────────────────────────────────
@@ -258,6 +262,124 @@ interface KmaApiItem {
   fcstValue: string;
 }
 
+/** 공공데이터포털 기상청 API 키가 설정되어 있는지(브라우저 번들 기준). */
+export function isKmaApiConfigured(): boolean {
+  const k = import.meta.env.VITE_KMA_SERVICE_KEY;
+  return typeof k === "string" && k.trim().length > 0;
+}
+
+function parseEnvMsClamped(
+  key: "VITE_KMA_FORECAST_POLL_MS" | "VITE_KMA_REALTIME_CHECK_MS" | "VITE_KMA_MID_POLL_MS",
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const raw = import.meta.env[key];
+  const n =
+    raw != null && typeof raw === "string" && raw.trim() !== "" ? Number(raw.trim()) : Number.NaN;
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** 단기예보 API 재조회 주기. 관제 운용 기본 8분(예보 발표 주기 대비 과도 호출 방지). */
+export function kmaForecastPollMs(): number {
+  return parseEnvMsClamped(
+    "VITE_KMA_FORECAST_POLL_MS",
+    8 * 60 * 1000,
+    3 * 60 * 1000,
+    30 * 60 * 1000,
+  );
+}
+
+/** 긴급·주의 판정 재계산 주기. 기본 45초. */
+export function kmaRealtimeCheckMs(): number {
+  return parseEnvMsClamped(
+    "VITE_KMA_REALTIME_CHECK_MS",
+    45 * 1000,
+    15 * 1000,
+    120 * 1000,
+  );
+}
+
+/** 중기예보 재조회 주기. 기본 6시간. */
+export function kmaMidTermPollMs(): number {
+  return parseEnvMsClamped(
+    "VITE_KMA_MID_POLL_MS",
+    6 * 60 * 60 * 1000,
+    2 * 60 * 60 * 1000,
+    12 * 60 * 60 * 1000,
+  );
+}
+
+/** 예보 슬롯을 시각 순으로 정렬(단기예보 API 응답 순서가 뒤섞일 수 있음). */
+export function sortKmaSlotsByTime(slots: KmaHourSlot[]): KmaHourSlot[] {
+  return [...slots].sort((a, b) => {
+    const ta = `${a.date.replace(/-/g, "")}${String(a.hour).padStart(2, "0")}`;
+    const tb = `${b.date.replace(/-/g, "")}${String(b.hour).padStart(2, "0")}`;
+    return ta.localeCompare(tb);
+  });
+}
+
+function slotForecastUtcMs(slot: KmaHourSlot): number {
+  const hh = String(slot.hour).padStart(2, "0");
+  return new Date(`${slot.date}T${hh}:00:00+09:00`).getTime();
+}
+
+/**
+ * 현재 시각(KST 기준 시계열)에 가장 가까운 예보 슬롯.
+ * 과거·현재 시각에 해당하는 슬롯 중 가장 최근 것을 우선하고, 없으면 가장 가까운 미래 슬롯.
+ */
+export function pickCurrentOrNextKmaSlot(slots: KmaHourSlot[]): KmaHourSlot | null {
+  if (!slots.length) return null;
+  const sorted = sortKmaSlotsByTime(slots);
+  const now = Date.now();
+  let bestPast: KmaHourSlot | null = null;
+  let bestPastT = -Infinity;
+  let bestFuture: KmaHourSlot | null = null;
+  let bestFutureT = Infinity;
+  for (const s of sorted) {
+    const t = slotForecastUtcMs(s);
+    if (t <= now && t >= bestPastT) {
+      bestPast = s;
+      bestPastT = t;
+    }
+    if (t >= now && t <= bestFutureT) {
+      bestFuture = s;
+      bestFutureT = t;
+    }
+  }
+  return bestPast ?? bestFuture ?? sorted[0];
+}
+
+/** SKY·PTY·POP 기반 시정(km) 추정 — 단기예보에 시정 항목이 없을 때 관제 UI용. */
+export function estimatedVisibilityKmFromSlot(slot: Pick<KmaHourSlot, "sky" | "ptyCode" | "pop">): number {
+  let vis = 12;
+  if (slot.sky === 3) vis = 8;
+  if (slot.sky === 4) vis = slot.pop > 40 ? 4 : 6;
+  if (slot.ptyCode === 1 || slot.ptyCode === 4) vis = Math.min(vis, 5);
+  return vis;
+}
+
+/** 관제 사이드바 `WeatherState`와 동일 단위(m/s, m, km, °C)로 매핑. */
+export function kmaSlotToDashboardWeather(slot: KmaHourSlot): {
+  windSpeed: number;
+  windDir: number;
+  windGust: number;
+  waveHeight: number;
+  visibility: number;
+  temp: number;
+} {
+  const gust = Math.min(38, slot.windSpeed * 1.35 + (slot.pop > 50 ? 3 : 0));
+  return {
+    windSpeed: slot.windSpeed,
+    windDir: slot.windDir,
+    windGust: Math.max(slot.windSpeed + 0.5, gust),
+    waveHeight: slot.waveHeight,
+    visibility: estimatedVisibilityKmFromSlot(slot),
+    temp: slot.temp,
+  };
+}
+
 /** 기상청 단기예보 API 실제 호출. 실패 시 null 반환(호출자에서 목업으로 대체). */
 export async function fetchKmaForecast(
   options: {
@@ -292,7 +414,8 @@ export async function fetchKmaForecast(
     const json = await res.json();
     const items: KmaApiItem[] =
       json?.response?.body?.items?.item ?? [];
-    return parseKmaItems(items);
+    const parsed = parseKmaItems(items);
+    return sortKmaSlotsByTime(parsed);
   } catch {
     return null;
   }
@@ -326,6 +449,206 @@ function parseKmaItems(items: KmaApiItem[]): KmaHourSlot[] {
   }
 
   return Array.from(slotMap.values()) as KmaHourSlot[];
+}
+
+// ─── 기상청 중기예보 (3~10일) ────────────────────────────────────────────────
+//
+//  MiddleTermFcstDay: WorkPlanView 달력에서 사용하는 일별 예보 단위.
+//  단기예보(KmaHourSlot)와 달리 일 평균값으로 집계해서 제공.
+//
+//  API: 중기육상예보 — getMidLandFcst (landRegId, tmFc)
+//       중기해상예보 — getMidSeaFcst  (regId, tmFc)
+//       중기기온예보 — getMidTa       (regId, tmFc)
+//
+//  포털: https://www.data.go.kr/data/15059468/openapi.do (중기예보)
+//
+//  키: VITE_KMA_SERVICE_KEY (단기예보와 동일 키 사용 가능)
+//  추가 변수:
+//    VITE_KMA_MIDLAND_REGION  — 중기육상예보 지점코드 (기본: 11H20000 남해안)
+//    VITE_KMA_MIDTA_REGION    — 중기기온예보 지점코드 (기본: 11H20000)
+//    VITE_KMA_MIDSEA_REGION   — 중기해상예보 지점코드 (기본: 12B20000 남해중부)
+
+export interface MiddleTermFcstDay {
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** 풍속 추정값(m/s) — 중기육상 rnSt·sky에서 간접 추정 */
+  windSpeedEstimated: number;
+  /** 파고 — 중기해상예보 파고 범위 중간값(m). 없으면 0 */
+  waveHeight: number;
+  /** 최저기온(°C) */
+  tempMin: number;
+  /** 최고기온(°C) */
+  tempMax: number;
+  /** 강수확률(%) — 오전·오후 중 최대 */
+  pop: number;
+  /** 강수 형태 대리(0: 없음, 1: 비, 3: 눈) */
+  ptyCode: number;
+  /** 하늘상태 1~4 (예보문에서 추출) */
+  sky: number;
+  /** 원본 예보 문자열(참고) */
+  wfKo: string;
+}
+
+function midTmFc(): string {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const h = kst.getHours();
+  const base = h < 18 ? "0600" : "1800";
+  const mm = String(kst.getMonth() + 1).padStart(2, "0");
+  const dd = String(kst.getDate()).padStart(2, "0");
+  return `${kst.getFullYear()}${mm}${dd}${base}`;
+}
+
+/** 중기 예보 문자열에서 하늘·pty 코드 간단 추출 */
+function parseMidWf(wf: string): { sky: number; ptyCode: number } {
+  if (!wf) return { sky: 1, ptyCode: 0 };
+  if (wf.includes("눈")) return { sky: 4, ptyCode: 3 };
+  if (wf.includes("비") || wf.includes("소나기")) return { sky: 4, ptyCode: 1 };
+  if (wf.includes("흐")) return { sky: 4, ptyCode: 0 };
+  if (wf.includes("구름많")) return { sky: 3, ptyCode: 0 };
+  return { sky: 1, ptyCode: 0 };
+}
+
+/** 중기해상 파고 문자열 "0.5~1.0m" → 중간값(m) */
+function parseWaveRange(str: string): number {
+  const m = str?.match(/([\d.]+)~([\d.]+)/);
+  if (m) return (parseFloat(m[1]) + parseFloat(m[2])) / 2;
+  const single = str?.match(/([\d.]+)/);
+  if (single) return parseFloat(single[1]);
+  return 0;
+}
+
+/**
+ * 기상청 중기예보 API(육상·해상·기온) 통합 호출 → 3~10일 일별 슬롯 반환.
+ * API 키 없으면 null 반환 → 호출 측에서 목업으로 대체.
+ */
+export async function fetchKmaMiddleTermForecast(): Promise<MiddleTermFcstDay[] | null> {
+  const serviceKey = import.meta.env.VITE_KMA_SERVICE_KEY;
+  if (!serviceKey) return null;
+
+  const tmFc = midTmFc();
+  const landRegId = import.meta.env.VITE_KMA_MIDLAND_REGION?.trim() || "11H20000";
+  const taRegId   = import.meta.env.VITE_KMA_MIDTA_REGION?.trim()   || "11H20000";
+  const seaRegId  = import.meta.env.VITE_KMA_MIDSEA_REGION?.trim()  || "12B20000";
+
+  const BASE = "https://apis.data.go.kr/1360000/MidFcstInfoService";
+
+  async function call(op: string, regId: string) {
+    const u = new URL(`${BASE}/${op}`);
+    u.searchParams.set("serviceKey", serviceKey);
+    u.searchParams.set("pageNo", "1");
+    u.searchParams.set("numOfRows", "10");
+    u.searchParams.set("dataType", "JSON");
+    u.searchParams.set("regId", regId);
+    u.searchParams.set("tmFc", tmFc);
+    const res = await fetch(u.toString(), { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.response?.body?.items?.item?.[0] ?? null;
+  }
+
+  try {
+    const [land, sea, ta] = await Promise.all([
+      call("getMidLandFcst", landRegId),
+      call("getMidSeaFcst",  seaRegId),
+      call("getMidTa",       taRegId),
+    ]);
+
+    if (!land && !ta) return null;
+
+    const days: MiddleTermFcstDay[] = [];
+    const now = new Date();
+    const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+
+    // 중기예보는 D+3 ~ D+10
+    for (let n = 3; n <= 10; n++) {
+      const d = new Date(kst);
+      d.setDate(d.getDate() + n);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+      const amPop  = Number(land?.[`rnSt${n}Am`]  ?? land?.[`rnSt${n}`]  ?? 20);
+      const pmPop  = Number(land?.[`rnSt${n}Pm`]  ?? land?.[`rnSt${n}`]  ?? 20);
+      const pop    = Math.max(amPop, pmPop);
+      const wfAm   = String(land?.[`wf${n}Am`]    ?? land?.[`wf${n}`]    ?? "");
+      const wfPm   = String(land?.[`wf${n}Pm`]    ?? land?.[`wf${n}`]    ?? "");
+      const wfText = wfPm || wfAm;
+      const { sky, ptyCode } = parseMidWf(wfText);
+
+      const taMin  = Number(ta?.[`taMin${n}`] ?? 15);
+      const taMax  = Number(ta?.[`taMax${n}`] ?? 22);
+
+      // 해상 파고: D+3~D+7 범위
+      const waveStr   = String(sea?.[`wh${n}B`] ?? sea?.[`wh${n}A`] ?? "");
+      const waveHeight = parseWaveRange(waveStr);
+
+      // 풍속: 파고·강수확률·하늘에서 간접 추정 (중기육상에 풍속 없음)
+      const windSpeedEstimated =
+        waveHeight > 0 ? Math.max(2, waveHeight * 4.5) :
+        sky === 4 ? (pop > 60 ? 9 : 6) :
+        sky === 3 ? 5 : 3;
+
+      days.push({ date: dateStr, windSpeedEstimated, waveHeight, tempMin: taMin, tempMax: taMax, pop, ptyCode, sky, wfKo: wfText });
+    }
+    return days;
+  } catch {
+    return null;
+  }
+}
+
+/** WorkPlanView 달력에서 쓸 수 있도록 MiddleTermFcstDay → ForecastDay-유사 형식 변환 */
+export function middleTermToForecastWeather(d: MiddleTermFcstDay): {
+  windSpeed: number;
+  windDir: number;
+  windGust: number;
+  waveHeight: number;
+  visibility: number;
+  temp: number;
+  precipitation: number;
+  pop: number;
+  sky: number;
+  ptyCode: number;
+} {
+  const gust = Math.min(25, d.windSpeedEstimated * 1.4);
+  const vis  = estimatedVisibilityKmFromSlot({ sky: d.sky, ptyCode: d.ptyCode, pop: d.pop });
+  const precip = d.ptyCode > 0 ? (d.pop > 70 ? 10 : d.pop > 50 ? 5 : 2) : 0;
+  return {
+    windSpeed: d.windSpeedEstimated,
+    windDir: 180,
+    windGust: Math.max(d.windSpeedEstimated + 0.5, gust),
+    waveHeight: d.waveHeight,
+    visibility: vis,
+    temp: (d.tempMin + d.tempMax) / 2,
+    precipitation: precip,
+    pop: d.pop,
+    sky: d.sky,
+    ptyCode: d.ptyCode,
+  };
+}
+
+/** 중기예보 목업 (7일치, API 키 없을 때) */
+export function generateMockMiddleTerm(): MiddleTermFcstDay[] {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(kst);
+    d.setDate(d.getDate() + 3 + i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const pop = Math.floor(Math.random() * 70);
+    const sky = pop > 55 ? 4 : pop > 35 ? 3 : 1;
+    const ptyCode = pop > 60 ? 1 : 0;
+    const waveHeight = 0.3 + Math.random() * 1.4;
+    return {
+      date: dateStr,
+      windSpeedEstimated: 2 + waveHeight * 3.5 + Math.random() * 2,
+      waveHeight,
+      tempMin: 13 + Math.floor(Math.random() * 5),
+      tempMax: 20 + Math.floor(Math.random() * 6),
+      pop,
+      ptyCode,
+      sky,
+      wfKo: sky === 4 ? (ptyCode ? "흐리고 비" : "흐림") : sky === 3 ? "구름많음" : "맑음",
+    };
+  });
 }
 
 // ─── 테스트/데모용 목업 데이터 생성 ──────────────────────────────────────────

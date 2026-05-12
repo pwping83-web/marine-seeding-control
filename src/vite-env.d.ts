@@ -30,6 +30,21 @@ interface ImportMetaEnv {
   /** 기상청 격자 Y 좌표. 기본 74(남해안 권역). */
   readonly VITE_KMA_NY?: string;
   /**
+   * 중기육상예보 지점코드. 기본 11H20000(남해안).
+   * 발급: https://www.data.go.kr/data/15059468/openapi.do (중기예보)
+   */
+  readonly VITE_KMA_MIDLAND_REGION?: string;
+  /** 중기기온예보 지점코드. 기본 11H20000. */
+  readonly VITE_KMA_MIDTA_REGION?: string;
+  /** 중기해상예보 지점코드. 기본 12B20000(남해중부). */
+  readonly VITE_KMA_MIDSEA_REGION?: string;
+  /** 중기예보 폴링 주기(ms). 기본 21600000(6h), 2~12h로 클램프 */
+  readonly VITE_KMA_MID_POLL_MS?: string;
+  /** 단기예보 API 폴링(ms). 기본 480000(8분), 3~30분으로 클램프 */
+  readonly VITE_KMA_FORECAST_POLL_MS?: string;
+  /** 긴급·주의 재평가(ms). 기본 45000(45초), 15~120초로 클램프 */
+  readonly VITE_KMA_REALTIME_CHECK_MS?: string;
+  /**
    * Groq AI API 키 (LLM 기반 기상 분석·자연어 리포트 생성).
    * console.groq.com 에서 발급.
    */

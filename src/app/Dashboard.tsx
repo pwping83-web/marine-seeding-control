@@ -61,6 +61,8 @@ import { VisionRoadmapModal } from "./components/VisionRoadmapModal";
 import {
   scoreHourSlot,
   generateMockForecast,
+  kmaSlotToDashboardWeather,
+  pickCurrentOrNextKmaSlot,
   type EmergencyAssessment,
   type SlotScore,
 } from "@/lib/kma-weather";
@@ -77,7 +79,7 @@ import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
 import { analyzeWorkPlanBriefWithGroq, type WorkPlanGroqBrief } from "@/lib/groq-work-plan";
 import { isGroqConfigured } from "@/lib/groq-weather";
 import { loadWorkAiUserNote, saveWorkAiUserNote } from "@/lib/work-ai-user-note";
-import { ymdLocal } from "@/lib/seeding-day-eval";
+import { estimateSeedingAreaHa, formatAreaHa, ymdLocal } from "@/lib/seeding-day-eval";
 import { buildSampleLteForYmdRange, trackReportUsesTestSample } from "@/lib/track-report-test-sample";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -825,6 +827,13 @@ export default function Dashboard() {
   const [demoSosVisible, setDemoSosVisible] = useState(false);
   const [demoSosBlink, setDemoSosBlink] = useState(false); // 선박 마커 깜빡임
 
+  const handleForecastScoresChange = useCallback((scores: SlotScore[]) => {
+    setForecastScores(scores);
+    if (scores.length === 0) return;
+    const slot = pickCurrentOrNextKmaSlot(scores.map((s) => s.slot));
+    if (slot) setWeather(kmaSlotToDashboardWeather(slot));
+  }, []);
+
   const wpIdx        = useRef(0);
   const counter      = useRef(1000 + INITIAL_SEED_COUNT + 1);
   const zoneCounts   = useRef<Record<"A"|"B"|"C", number>>({ ...INIT_ZONE_COUNTS });
@@ -876,7 +885,7 @@ export default function Dashboard() {
   }, [lteTrackPoints]);
 
   const workLocalRec = useMemo(() => {
-    const slot = forecastScores[0]?.slot;
+    const slot = pickCurrentOrNextKmaSlot(forecastScores.map((s) => s.slot));
     return buildLocalWorkRecommendation(forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight, {
       windGustMps: weather.windGust,
       visibilityKm: weather.visibility,
@@ -893,6 +902,12 @@ export default function Dashboard() {
     weather.visibility,
     weather.temp,
   ]);
+
+  /** 살포 점 Convex Hull 기반 추정 구역 면적 */
+  const seedingAreaHa = useMemo(() => {
+    if (filteredDrops.length < 3) return 0;
+    return estimateSeedingAreaHa(filteredDrops.map((d) => ({ lat: d.lat, lng: d.lng })));
+  }, [filteredDrops]);
 
   const vesselLteId = useMemo(() => vesselLteIdFromEnv(), []);
 
@@ -1330,8 +1345,9 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, [mapMode, lteFollowEnabled, lteRemoteFresh]);
 
-  // Weather simulation
+  // Weather: 예보 슬롯이 없을 때만 시연용 랜덤 변동 — 기상청 API·목업 예보 수신 후에는 `handleForecastScoresChange`가 동기화
   useEffect(() => {
+    if (forecastScores.length > 0) return;
     const iv = setInterval(() => {
       setWeather((w) => ({
         windSpeed: Math.max(2, Math.min(28, w.windSpeed + (Math.random() - 0.5) * 1.8)),
@@ -1343,7 +1359,7 @@ export default function Dashboard() {
       }));
     }, 5000);
     return () => clearInterval(iv);
-  }, []);
+  }, [forecastScores.length]);
 
   // ── B2G 시연 핸들러 ──────────────────────────────────────────────────────
   // 데모용 슬롯 생성 헬퍼
@@ -1702,16 +1718,8 @@ export default function Dashboard() {
       <div style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
         <WeatherAIPanel
           compact
-          liveWeather={{
-            windSpeed: weather.windSpeed,
-            windDir: weather.windDir,
-            waveHeight: weather.waveHeight,
-            ptyCode: forecastScores[0]?.slot.ptyCode ?? 0,
-            temp: weather.temp,
-            pop: forecastScores[0]?.slot.pop ?? 0,
-          }}
           onSafetyLevelChange={setSafetyLevel}
-          onScoresChange={setForecastScores}
+          onScoresChange={handleForecastScoresChange}
           onGroqSummaryChange={setGroqSummary}
           onEmergencyReturn={(msg, _assessment: EmergencyAssessment) => setAiEmergencyMsg(msg)}
         />
@@ -1805,6 +1813,20 @@ export default function Dashboard() {
                 </span>
               </div>
             ))}
+            {/* 살포 구역 추정 면적 (3점 이상일 때만 표시) */}
+            {filteredDrops.length >= 3 && (
+              <div
+                className="col-span-3 flex items-center justify-between rounded-lg border px-2.5 py-1.5"
+                style={{ background: SIDEBAR_CARD_BG, borderColor: "rgba(64,224,208,0.14)" }}
+                title="살포 점 외곽(Convex Hull) 기반 추정 면적. 격자 정밀 측량 아님."
+              >
+                <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <Map className="h-3 w-3 text-teal-400/55" aria-hidden />
+                  구역 추정 면적
+                </span>
+                <span className="font-mono text-sm font-bold text-teal-200/80">{formatAreaHa(seedingAreaHa)}</span>
+              </div>
+            )}
           </div>
         </div>
 
