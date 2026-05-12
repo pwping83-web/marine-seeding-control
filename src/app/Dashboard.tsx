@@ -85,6 +85,13 @@ import { analyzeWorkPlanBriefWithGroq, type WorkPlanGroqBrief } from "@/lib/groq
 import { isGroqConfigured } from "@/lib/groq-weather";
 import { loadWorkAiUserNote, saveWorkAiUserNote } from "@/lib/work-ai-user-note";
 import { estimateSeedingAreaHa, formatAreaHa, ymdLocal } from "@/lib/seeding-day-eval";
+import {
+  dropAgeColors,
+  dropTestAgeColors,
+  isManualTestOriginDrop,
+  parseTestStyleDropLabel,
+  seedDropMarkerColors,
+} from "@/lib/seed-drop-visual";
 import { buildSampleLteForYmdRange, trackReportUsesTestSample } from "@/lib/track-report-test-sample";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -470,31 +477,13 @@ function initWeather(): WeatherState {
   };
 }
 
-type DropAgeBand = "recent" | "orange3m" | "pink1y" | "light2y" | "pale";
-
-function dropAgeBand(recordedAt: number, now: number = Date.now()): DropAgeBand {
-  const days = (now - recordedAt) / 86_400_000;
-  if (days <= 45) return "recent";
-  if (days < 120) return "orange3m";
-  if (days < 400) return "pink1y";
-  if (days < 800) return "light2y";
-  return "pale";
-}
-
-function dropAgeColors(band: DropAgeBand): { fill: string; stroke: string; pulse: string } {
-  switch (band) {
-    case "recent":   return { fill: "#7f1d1d", stroke: "#fecaca", pulse: "#f87171" };
-    case "orange3m": return { fill: "#c2410c", stroke: "#fdba74", pulse: "#fb923c" };
-    case "pink1y":   return { fill: "#be185d", stroke: "#fbcfe8", pulse: "#f472b6" };
-    case "light2y":  return { fill: "#fda4af", stroke: "#fff1f2", pulse: "#fb7185" };
-    case "pale":
-    default:         return { fill: "#cbd5e1", stroke: "#f8fafc", pulse: "#94a3b8" };
-  }
-}
-
 function dropVisualColors(d: SeedDrop): { fill: string; stroke: string; pulse: string } {
-  if (d.verificationMismatch) return { fill: "#171717", stroke: "#a3a3a3", pulse: "#737373" };
-  return dropAgeColors(dropAgeBand(d.recordedAt));
+  return seedDropMarkerColors({
+    recordedAt: d.recordedAt,
+    label: d.label,
+    id: d.id,
+    verificationMismatch: d.verificationMismatch,
+  });
 }
 
 /** 사이드바 이력 행 좌측 강조 — 상단 패널과 동일한 틸 톤(지도 연령 색과 분리) */
@@ -557,11 +546,11 @@ function seedInitial(): SeedDrop[] {
 
 function exportCSV(drops: SeedDrop[]) {
   const header =
-    "식별번호,구역,시각,위도,경도,상태,기록시각_ISO,recorded_at_ms\n";
+    "식별번호,구역,시각,위도,경도,상태,기록시각_ISO,recorded_at_ms,기록일_로컬\n";
   const rows = drops
     .map(
       (d) =>
-        `${d.id},${d.label},${d.time},${d.lat},${d.lng},${d.status},${new Date(d.recordedAt).toISOString()},${d.recordedAt}`,
+        `${d.id},${d.label},${d.time},${d.lat},${d.lng},${d.status},${new Date(d.recordedAt).toISOString()},${d.recordedAt},${ymdLocal(new Date(d.recordedAt))}`,
     )
     .join("\n");
   const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8" });
@@ -573,6 +562,12 @@ function exportCSV(drops: SeedDrop[]) {
   a.download = `종자살포이력_${ymd}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** `month` — 1~12, 해당 월 마지막 날 YYYY-MM-DD */
+function lastDayOfMonthYmd(year: number, month: number): string {
+  const last = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
 }
 
 // ─── WindCompass ──────────────────────────────────────────────────────────────
@@ -925,6 +920,54 @@ export default function Dashboard() {
       return true;
     });
   }, [drops, filterStart, filterEnd]);
+
+  /** 투하가 있는 월만 모아 지도·이력 필터용 칩으로 표시 (최근 월이 앞) */
+  const dropMonthSummaries = useMemo(() => {
+    const m = new Map<string, { year: number; month: number; count: number }>();
+    for (const d of drops) {
+      const ymd = ymdLocal(new Date(d.recordedAt));
+      const ym = ymd.slice(0, 7);
+      const [ys, ms] = ym.split("-").map(Number);
+      if (!Number.isFinite(ys) || !Number.isFinite(ms)) continue;
+      const cur = m.get(ym) ?? { year: ys, month: ms, count: 0 };
+      cur.count += 1;
+      m.set(ym, cur);
+    }
+    return [...m.entries()]
+      .map(([ym, v]) => ({
+        ym,
+        year: v.year,
+        month: v.month,
+        count: v.count,
+        start: `${ym}-01`,
+        end: lastDayOfMonthYmd(v.year, v.month),
+      }))
+      .sort((a, b) => (a.ym < b.ym ? 1 : a.ym > b.ym ? -1 : 0));
+  }, [drops]);
+
+  /** 시작·끝이 같은 연-월이면 그 달의 ‘일’ 칩을 보여 줌 */
+  const dayStripYm = useMemo(() => {
+    if (!filterStart || !filterEnd || filterStart > filterEnd) return "";
+    const ym1 = filterStart.slice(0, 7);
+    const ym2 = filterEnd.slice(0, 7);
+    if (ym1 !== ym2) return "";
+    return ym1;
+  }, [filterStart, filterEnd]);
+
+  const dayStripEntries = useMemo(() => {
+    if (!dayStripYm) return [];
+    const byDay = new Map<number, number>();
+    for (const d of drops) {
+      const ymd = ymdLocal(new Date(d.recordedAt));
+      if (!ymd.startsWith(dayStripYm)) continue;
+      const day = parseInt(ymd.slice(8, 10), 10);
+      if (!Number.isFinite(day)) continue;
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    }
+    return [...byDay.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, count]) => ({ day, count }));
+  }, [drops, dayStripYm]);
 
   const latestId = drops[drops.length - 1]?.id;
 
@@ -1645,6 +1688,25 @@ export default function Dashboard() {
     setDrops((prev) => prev.filter((x) => x.id !== d.id));
   }, []);
 
+  const clearDropDateFilter = useCallback(() => {
+    setFilterStart("");
+    setFilterEnd("");
+    setMapFitNonce((n) => n + 1);
+  }, []);
+
+  const applyDropMonthFilter = useCallback((year: number, month: number) => {
+    const start = `${year}-${String(month).padStart(2, "0")}-01`;
+    const end = lastDayOfMonthYmd(year, month);
+    setFilterStart(start);
+    setFilterEnd(end);
+  }, []);
+
+  const applyDropDayFilter = useCallback((year: number, month: number, day: number) => {
+    const ymd = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    setFilterStart(ymd);
+    setFilterEnd(ymd);
+  }, []);
+
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
   /** 내 위치 모드: GPS로 다시 잡고 지도 맞춤 / 테스트: 살포·항적 기준 맞춤 */
@@ -1678,7 +1740,7 @@ export default function Dashboard() {
     const jitter = () => (Math.random() - 0.5) * 0.00006;
     const newDrop: SeedDrop = {
       id: String(counter.current).padStart(4, "0"),
-      label: `GNSS-${ymd}-${String(seq).padStart(2, "0")}`,
+      label: `${ymd} T${String(seq).padStart(2, "0")}`,
       time: fmt(new Date(recordedAt)),
       lat: parseFloat((gpsVessel.lat + jitter()).toFixed(6)),
       lng: parseFloat((gpsVessel.lng + jitter()).toFixed(6)),
@@ -1743,6 +1805,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (viewMode === "schedule") setMapFitNonce((n) => n + 1);
   }, [viewMode]);
+
+  /** 날짜 필터 변경 시 지도 fitBounds가 선택된 투하 점들로 맞춰지도록 */
+  useEffect(() => {
+    if (viewMode !== "map") return;
+    if (!filterStart && !filterEnd) return;
+    const id = window.setTimeout(() => setMapFitNonce((n) => n + 1), 420);
+    return () => window.clearTimeout(id);
+  }, [filterStart, filterEnd, viewMode]);
 
   useEffect(() => {
     setWorkAiUserNote(loadWorkAiUserNote());
@@ -2374,10 +2444,12 @@ export default function Dashboard() {
                 [...filteredDrops].reverse().map((d) => {
                   const isNew = d.id === latestId;
                   const accent = sidebarHistoryRowAccent(d, isNew);
+                  const testOrigin = isManualTestOriginDrop(d.label, d.id);
+                  const testParts = testOrigin ? parseTestStyleDropLabel(d.label) : null;
                   return (
                     <div
                       key={d.id}
-                      className={`grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] items-center gap-1 rounded-md px-1.5 py-1.5 font-mono text-[11px] leading-snug ${
+                      className={`flex flex-col gap-0.5 rounded-md px-1.5 py-1.5 font-mono text-[11px] leading-snug ${
                         isNew ? "ring-1 ring-teal-400/30" : ""
                       }`}
                       style={{
@@ -2387,7 +2459,13 @@ export default function Dashboard() {
                         borderLeftColor: accent,
                       }}
                     >
+                      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] items-center gap-1">
                       <span className="flex min-w-0 items-center">
+                        {testParts ? (
+                          <span className="min-w-0 truncate font-mono text-[11px] font-semibold tracking-tight text-slate-100">
+                            {testParts.displayLine}
+                          </span>
+                        ) : (
                         <span
                           className="max-w-full truncate rounded-md border px-1 py-0.5 text-[11px] font-medium text-slate-200"
                           style={{
@@ -2397,6 +2475,7 @@ export default function Dashboard() {
                         >
                           {d.label}
                         </span>
+                        )}
                       </span>
                       <span className="truncate font-medium text-slate-200">{d.time}</span>
                       <span className="text-right text-slate-300/90">{d.lat.toFixed(3)}</span>
@@ -2411,6 +2490,7 @@ export default function Dashboard() {
                       >
                         <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                       </button>
+                      </div>
                     </div>
                   );
                 })
@@ -2423,6 +2503,97 @@ export default function Dashboard() {
                 borderColor: "rgba(64,224,208,0.2)",
               }}
             >
+              <div
+                className="rounded-md border border-teal-500/12 px-1.5 py-1.5"
+                style={{ background: "rgba(12, 39, 72, 0.4)" }}
+              >
+                <p className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold text-teal-200/90">
+                  <Calendar className="h-3 w-3 shrink-0 text-teal-400/90" aria-hidden />
+                  월·일별 지도
+                </p>
+                <p className="mb-1.5 text-[9px] leading-snug text-slate-400">
+                  월을 누르면 그달 투하만 지도에 남고, 같은 달이면 날짜를 골라 하루만 볼 수 있습니다.
+                </p>
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={clearDropDateFilter}
+                    title="기간 제한 없이 전체 투하 표시"
+                    className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                      !filterStart && !filterEnd
+                        ? "border-teal-400/55 bg-teal-500/25 text-teal-50"
+                        : "border-white/10 bg-black/25 text-slate-300 hover:border-teal-400/35"
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {dropMonthSummaries.map((s) => {
+                    const active = filterStart === s.start && filterEnd === s.end;
+                    return (
+                      <button
+                        key={s.ym}
+                        type="button"
+                        onClick={() => applyDropMonthFilter(s.year, s.month)}
+                        title={`${s.year}년 ${s.month}월 투하 ${s.count}건만 지도·목록에 표시`}
+                        className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                          active
+                            ? "border-cyan-400/55 bg-cyan-600/30 text-cyan-50"
+                            : "border-white/10 bg-black/20 text-slate-200 hover:border-teal-400/35"
+                        }`}
+                      >
+                        {s.month}월 {s.year}
+                        <span className="ml-0.5 font-mono text-[9px] font-semibold opacity-80">({s.count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {dayStripEntries.length > 0 && dayStripYm ? (
+                  <div className="border-t border-white/[0.06] pt-1.5">
+                    <div className="mb-1 flex items-center justify-between gap-1">
+                      <span className="text-[9px] font-medium text-teal-200/65">{dayStripYm} 일별</span>
+                      {filterStart === filterEnd && filterStart ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const [yy, mm] = dayStripYm.split("-").map(Number);
+                            if (Number.isFinite(yy) && Number.isFinite(mm)) applyDropMonthFilter(yy, mm);
+                          }}
+                          className="shrink-0 text-[9px] font-semibold text-cyan-300/90 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200"
+                        >
+                          이달 전체
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="-mx-0.5 max-h-[4.5rem] overflow-y-auto overflow-x-hidden pr-0.5">
+                      <div className="flex flex-wrap gap-0.5">
+                        {dayStripEntries.map(({ day, count }) => {
+                          const ymd = `${dayStripYm}-${String(day).padStart(2, "0")}`;
+                          const [yy, mm] = dayStripYm.split("-").map(Number);
+                          const active = filterStart === ymd && filterEnd === ymd;
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => {
+                                if (Number.isFinite(yy) && Number.isFinite(mm)) applyDropDayFilter(yy, mm, day);
+                              }}
+                              title={`${ymd} · ${count}건`}
+                              className={`min-w-[1.65rem] rounded border px-1 py-0.5 text-center font-mono text-[10px] font-bold leading-none transition-colors ${
+                                active
+                                  ? "border-teal-300/60 bg-teal-500/35 text-white"
+                                  : "border-white/10 bg-black/25 text-slate-200 hover:border-teal-400/40"
+                              }`}
+                            >
+                              {day}
+                              <span className="mt-0.5 block text-[7px] font-semibold opacity-75">{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <input ref={fileImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} aria-hidden />
               <div className="flex items-center gap-1.5">
                 <input
@@ -2877,7 +3048,13 @@ export default function Dashboard() {
                 }}
               >
                 <div className="mb-2 space-y-1.5 text-[11px] leading-relaxed text-white/55">
-                  <p>살포 점 색은 기록 시각 경과에 따라 구분됩니다.</p>
+                  <p>살포 점 색은 <strong className="text-slate-200/90">기록 시각이 얼마나 지났는지</strong>(기간)에 따라 붉은 계열 단계가 바뀝니다.</p>
+                  <p>
+                    라벨이 <span className="font-mono text-cyan-200/90">YYYY-MM-DD T01</span> 형태인 수동 기록은 같은 기간 구간이라도{" "}
+                    <strong className="text-cyan-100/90">청록 계열</strong>로 구역 살포(A01 등)와 구분됩니다. (옛날{" "}
+                    <span className="font-mono text-cyan-200/80">투하-</span>·<span className="font-mono text-cyan-200/80">GNSS-</span>·
+                    <span className="font-mono text-cyan-200/80">센서-</span> 라벨도 동일)
+                  </p>
                   <p>검정은 살포했으나 검수 시 위치가 맞지 않거나 누락된 부분입니다.</p>
                 </div>
                 <div className="space-y-1.5">
@@ -2890,6 +3067,14 @@ export default function Dashboard() {
                     <LegendRow compact color={dropAgeColors("light2y").fill}  label="약 2년 전후"             shape="circle-sm" />
                     <LegendRow compact color={dropAgeColors("pale").fill}     label="2년 이상"                shape="circle-sm" />
                     <LegendRow compact color="#171717"                        label="검수 불일치·누락(검정)"    shape="circle-sm" />
+                  </div>
+                  <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+                    <p className="text-[10px] font-medium text-cyan-200/75">수동 기록(날짜 T순번) — 기간 단계는 위와 동일</p>
+                    <LegendRow compact color={dropTestAgeColors("recent").fill}   label="최근(≈45일 이내)" shape="circle-sm" />
+                    <LegendRow compact color={dropTestAgeColors("orange3m").fill} label="약 3개월 전후"   shape="circle-sm" />
+                    <LegendRow compact color={dropTestAgeColors("pink1y").fill}   label="약 1년 전후"     shape="circle-sm" />
+                    <LegendRow compact color={dropTestAgeColors("light2y").fill}  label="약 2년 전후"     shape="circle-sm" />
+                    <LegendRow compact color={dropTestAgeColors("pale").fill}     label="2년 이상"        shape="circle-sm" />
                   </div>
                 </div>
                 <button

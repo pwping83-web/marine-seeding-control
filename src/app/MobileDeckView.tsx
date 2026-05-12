@@ -5,15 +5,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import {
   Brain,
   CircleSlash,
+  Droplets,
   LocateFixed,
   Play,
   ShieldAlert,
   Sprout,
+  Trash2,
 } from "lucide-react";
 import { OPS_AREA_CENTER } from "./geo/koreaOpsArea";
 import { AiTicker } from "./components/AiTicker";
@@ -23,8 +25,12 @@ import {
   marineDbEnabled,
   fetchSeedDropRecords,
   subscribeShipCommandInserts,
+  upsertSeedDropRecord,
+  deleteSeedDropRecord,
+  type SeedDropInput,
 } from "@/lib/marine-db";
 import { MARINE_OPS_SIGNAL_BC } from "@/lib/marine-ops-signals";
+import { parseTestStyleDropLabel, seedDropMarkerColors } from "@/lib/seed-drop-visual";
 import {
   assessEmergency,
   buildDeparturePlan,
@@ -58,6 +64,10 @@ function geolocationErrorMessage(err: GeolocationPositionError): string {
     default:
       return err.message || "위치 정보를 가져오지 못했습니다.";
   }
+}
+
+function fmtDropTime(d: Date) {
+  return d.toLocaleTimeString("en-GB", { hour12: false });
 }
 
 /** Geolocation API 는 보안 컨텍스트(HTTPS·localhost)에서만 동작 */
@@ -118,6 +128,11 @@ export default function MobileDeckView() {
   const [groqSummary, setGroqSummary] = useState("");
   const groqTickerLastRef = useRef(0);
   const firstGpsCenterRef = useRef(false);
+  /** 함정 화면에서 센서 트리거 시뮬 시 라벨 순번 (세션 단위) */
+  const manualDropSeqRef = useRef(0);
+  const [sessionDrops, setSessionDrops] = useState<SeedDropInput[]>([]);
+  const [dropToast, setDropToast] = useState<string | null>(null);
+  const [dropBusy, setDropBusy] = useState(false);
 
   const center = useMemo<[number, number]>(
     () => (pos ? [pos.lat, pos.lng] : [OPS_AREA_CENTER.lat, OPS_AREA_CENTER.lng]),
@@ -364,6 +379,59 @@ export default function MobileDeckView() {
     }
   }, [sending]);
 
+  /** 살포 중일 때만 — 현재 GPS 좌표에 센서 1회 트리거와 동일하게 1건 기록·지도 표시 */
+  const recordManualSensorDrop = useCallback(async () => {
+    if (dropBusy || !pos || !seedingActive) return;
+    setDropBusy(true);
+    try {
+      const recordedAt = Date.now();
+      manualDropSeqRef.current += 1;
+      const seq = manualDropSeqRef.current;
+      const ymd = ymdLocal(new Date(recordedAt));
+      const jitter = () => (Math.random() - 0.5) * 0.00006;
+      const newDrop: SeedDropInput = {
+        id: `mob-${recordedAt}-${seq}`,
+        label: `${ymd} T${String(seq).padStart(2, "0")}`,
+        time: fmtDropTime(new Date(recordedAt)),
+        lat: parseFloat((pos.lat + jitter()).toFixed(6)),
+        lng: parseFloat((pos.lng + jitter()).toFixed(6)),
+        status: "성공",
+        recordedAt,
+      };
+      setSessionDrops((prev) => [...prev, newDrop].slice(-60));
+      if (marineDbEnabled()) {
+        const ok = await upsertSeedDropRecord(newDrop);
+        void refreshTodayCount();
+        setDropToast(
+          ok
+            ? `1건 기록 · ${newDrop.label}`
+            : `지도에는 표시됨 · 서버 저장 실패 · ${newDrop.label}`,
+        );
+      } else {
+        setDropToast(`1건(로컬 시연) · ${newDrop.label}`);
+      }
+      window.setTimeout(() => setDropToast(null), 3500);
+    } finally {
+      window.setTimeout(() => setDropBusy(false), 320);
+    }
+  }, [dropBusy, pos, seedingActive, refreshTodayCount]);
+
+  const removeSessionDrop = useCallback(
+    async (d: SeedDropInput) => {
+      if (marineDbEnabled()) {
+        const ok = await deleteSeedDropRecord(d.id);
+        if (!ok) {
+          setDropToast("서버에서 삭제하지 못했습니다.");
+          window.setTimeout(() => setDropToast(null), 2800);
+          return;
+        }
+        void refreshTodayCount();
+      }
+      setSessionDrops((prev) => prev.filter((x) => x.id !== d.id));
+    },
+    [refreshTodayCount],
+  );
+
   const runAiBrief = useCallback(async () => {
     setAiOpen(true);
     setAiLoading(true);
@@ -500,6 +568,45 @@ export default function MobileDeckView() {
           attributionControl
         >
           <TileLayer attribution={TILE_ATTR} url={TILE_CARTO_DARK} />
+          {sessionDrops.map((d, i) => {
+            const isLast = i === sessionDrops.length - 1;
+            const c = seedDropMarkerColors({
+              recordedAt: d.recordedAt,
+              label: d.label,
+              id: d.id,
+              verificationMismatch: d.verificationMismatch,
+            });
+            const parts = parseTestStyleDropLabel(d.label);
+            return (
+              <CircleMarker
+                key={d.id}
+                center={[d.lat, d.lng]}
+                radius={isLast ? 10 : 7}
+                pathOptions={{
+                  color: c.stroke,
+                  fillColor: c.fill,
+                  fillOpacity: 0.9,
+                  weight: isLast ? 2.2 : 1.4,
+                }}
+              >
+                <Tooltip
+                  permanent
+                  direction="right"
+                  offset={[12, 0]}
+                  opacity={1}
+                  className="!rounded-md !border !border-white/20 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-mono !font-bold !text-teal-100 !shadow-lg"
+                >
+                  {parts ? (
+                    <span className="block whitespace-nowrap font-mono text-[10px] font-bold leading-tight">
+                      {parts.displayLine}
+                    </span>
+                  ) : (
+                    <span className="block whitespace-nowrap font-mono text-[10px] leading-tight">{d.label}</span>
+                  )}
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
           {pos && ownShipIcon ? (
             <>
               <Marker position={[pos.lat, pos.lng]} icon={ownShipIcon} zIndexOffset={900} />
@@ -528,6 +635,11 @@ export default function MobileDeckView() {
           </button>
         </div>
 
+        {dropToast ? (
+          <div className="pointer-events-none absolute bottom-[5.5rem] left-1/2 z-[480] max-w-[min(92vw,22rem)] -translate-x-1/2 rounded-lg border border-teal-400/35 bg-[#041c2e]/95 px-3 py-2 text-center text-[11px] font-semibold text-teal-100 shadow-lg">
+            {dropToast}
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={() => void requestLocateNow()}
@@ -545,6 +657,51 @@ export default function MobileDeckView() {
           </span>
         </button>
       </div>
+
+      {sessionDrops.length > 0 ? (
+        <div
+          className="shrink-0 border-t border-teal-500/20 bg-[#050f18]/95 px-2 py-2"
+          style={{ paddingLeft: "max(0.5rem, env(safe-area-inset-left))", paddingRight: "max(0.5rem, env(safe-area-inset-right))" }}
+        >
+          <p className="mb-1 text-[10px] font-semibold tracking-tight text-teal-200/85">기록 이력 (이 기기 세션)</p>
+          <div className="max-h-[min(28vh,10.5rem)] space-y-1 overflow-y-auto overscroll-contain pr-0.5">
+            {[...sessionDrops].reverse().map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-teal-500/15 bg-[#071422]/85 px-2 py-1.5"
+              >
+                <div className="min-w-0 flex-1">
+                  {(() => {
+                    const p = parseTestStyleDropLabel(d.label);
+                    if (p) {
+                      return (
+                        <p className="truncate font-mono text-[10px] font-bold leading-snug text-teal-100">
+                          {p.displayLine}
+                        </p>
+                      );
+                    }
+                    return (
+                      <>
+                        <p className="truncate font-mono text-[10px] font-bold text-teal-100">{d.label}</p>
+                        <p className="truncate text-[9px] text-slate-400">{d.time}</p>
+                      </>
+                    );
+                  })()}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void removeSessionDrop(d)}
+                  title="이 투하만 삭제"
+                  aria-label={`${d.label} 삭제`}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-500/35 text-rose-200/90 transition-colors hover:bg-rose-950/50 hover:text-rose-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <section
         className="shrink-0 border-t border-teal-500/20 px-2 pt-2"
@@ -626,6 +783,28 @@ export default function MobileDeckView() {
             <span className="text-[8px] font-semibold tracking-wide text-white/60">안전 감시</span>
           </button>
           </div>
+          <button
+            type="button"
+            disabled={dropBusy || !seedingActive || !pos}
+            title={
+              !pos
+                ? "현재 위치가 잡혀야 투하 지점을 찍을 수 있습니다."
+                : !seedingActive
+                  ? "살포 중일 때만 센서 트리거를 시뮬할 수 있습니다."
+                  : "현재 GPS 위치에 살포 1건을 기록합니다(센서 1회 트리거와 동일)."
+            }
+            onClick={() => void recordManualSensorDrop()}
+            className="group relative mt-2.5 flex min-h-[52px] w-full flex-row items-center justify-center gap-2.5 overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/80 via-[#052018] to-[#020807] px-3 py-2.5 text-emerald-50 shadow-[inset_0_1px_0_rgba(167,243,208,0.12),0_8px_24px_-8px_rgba(16,185,129,0.38)] outline-none transition-[transform,box-shadow] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45"
+          >
+            <span className={padGloss} aria-hidden />
+            <span className={`${padIconShell} shrink-0 text-emerald-300`}>
+              <Droplets className="h-4 w-4 drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" strokeWidth={2.25} aria-hidden />
+            </span>
+            <div className="min-w-0 flex flex-col items-start gap-0.5 text-left">
+              <span className="text-[12px] font-black tracking-tight">투하 (센서 시뮬)</span>
+              <span className="text-[8px] font-semibold text-emerald-300/55">현재 위치에 1건 · 지도에 표시</span>
+            </div>
+          </button>
         </div>
       </section>
 

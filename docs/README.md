@@ -6,6 +6,7 @@
 
 ```
 docs/
+├── hardware-arduino-gnss-seed/ … 센서→웹 투하·telemetry·BLE 정리
 ├── 제품-운영/           … 관제 웹 개요·매뉴얼·자문·홍보
 ├── API-키-및-연동-가이드/ … data.go.kr 활용신청·VITE_KMA·중기예보 양식
 ├── 사업-공고/           … grant-watch 산출 MD·부처 과제 요약
@@ -15,7 +16,7 @@ docs/
 ```
 
 **관공서 제출·심사·B2G** 한 장 요약은 루트 **`관공서-제출용/docs/`** 에 모았습니다.  
-**하드웨어·단말**은 **`arduino/README.md`** 를 보세요.
+**하드웨어·단말**은 **[`arduino/README.md`](./../arduino/README.md)** (스케치·LTE·Edge URL)와 **[`docs/hardware-arduino-gnss-seed/README.md`](./hardware-arduino-gnss-seed/README.md)** (센서→웹·투하·블루투스 개념 정리)를 보세요.
 
 ---
 
@@ -23,6 +24,7 @@ docs/
 
 | 폴더 | 성격 | 주요 파일 |
 |------|------|-----------|
+| **[hardware-arduino-gnss-seed](./hardware-arduino-gnss-seed/)** | 센서·아두이노→웹·DB·투하(BLE) 개념 | [`README.md`](./hardware-arduino-gnss-seed/README.md) |
 | **[제품-운영](./제품-운영/)** | 시스템 개요, 사용자 안내, 홍보·자문 | `해양-종자-살포-관제-시스템-개요.md`, `사용자매뉴얼_v1.5.md`, `초보자용_아두이노와_관제웹_이해하기.md` |
 | **[API-키-및-연동-가이드](./API-키-및-연동-가이드/)** | 공공데이터포털·기상청 키·`.env` 대응 | `README.md`, `중기예보-활용신청-양식예시.md` |
 | **[사업-공고](./사업-공고/)** | 공고 모니터링·과제 요약(`npm run grant:watch` 산출) | [`README.md`](./사업-공고/README.md), [`99_공고-모니터링-최근결과.md`](./사업-공고/99_공고-모니터링-최근결과.md), 수동 요약 MD |
@@ -38,6 +40,7 @@ docs/
 - 사용자 매뉴얼: [제품-운영/사용자매뉴얼_v1.5.md](./제품-운영/사용자매뉴얼_v1.5.md)
 - API·키 발급: [API-키-및-연동-가이드/README.md](./API-키-및-연동-가이드/README.md)
 - 관공서 제출 패키지: [../관공서-제출용/README.md](../관공서-제출용/README.md)
+- 센서·투하·DB 연동(구현 기준): [hardware-arduino-gnss-seed/README.md](./hardware-arduino-gnss-seed/README.md)
 
 ---
 

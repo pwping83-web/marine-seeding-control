@@ -6,6 +6,7 @@
 
 | 순서 | 파일 | 내용 |
 |------|------|------|
+| 0 | [../docs/hardware-arduino-gnss-seed/README.md](../docs/hardware-arduino-gnss-seed/README.md) | 센서→`telemetry-ingest`→`seed_drop_records`→웹, BLE·폰 경유 시나리오 (**§7**) |
 | 1 | [docs/01-보드와-LTE-모뎀-구매-현실.md](docs/01-보드와-LTE-모뎀-구매-현실.md) | 무엇을 사면 되는지, 대략 사양·가격대 감 |
 | 2 | [docs/02-해상-통신-범위-한계.md](docs/02-해상-통신-범위-한계.md) | “몇 km 반경”이 아니라 LTE가 되는 이유·한계 |
 | 3 | [docs/03-관제웹-마커-궤적-주기-서버-한도.md](docs/03-관제웹-마커-궤적-주기-서버-한도.md) | 마커가 어떻게 찍히는지, 몇 초마다인지, 서버 제한 |
