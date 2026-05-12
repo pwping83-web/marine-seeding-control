@@ -1874,18 +1874,19 @@ export default function Dashboard() {
 
   const handleRouteMapClickAddWaypoint = useCallback(
     (la: number, ln: number) => {
+      if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
       setManualReplayPath((prev) => {
         const base = prev ?? todayReplayTrackPath;
         return [...base, [la, ln] as [number, number]];
       });
       setShowTodayTrackReplayOnMap(true);
-      setMapFitNonce((n) => n + 1);
     },
     [todayReplayTrackPath],
   );
 
   const handleRouteVertexDragEnd = useCallback(
     (index: number, la: number, ln: number) => {
+      if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
       setManualReplayPath((prev) => {
         const base = prev ?? todayReplayTrackPath;
         if (index < 0 || index >= base.length) return prev;
@@ -1893,7 +1894,6 @@ export default function Dashboard() {
         next[index] = [la, ln];
         return next;
       });
-      setMapFitNonce((n) => n + 1);
     },
     [todayReplayTrackPath],
   );
@@ -1933,8 +1933,8 @@ export default function Dashboard() {
   );
 
   const handlePlannedSeedMapClick = useCallback((la: number, ln: number) => {
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
     setPlannedSeedLatLng((p) => [...p, [la, ln]]);
-    setMapFitNonce((n) => n + 1);
   }, []);
 
   const handlePlannedSeedEvenDistribute = useCallback(() => {
@@ -1962,16 +1962,17 @@ export default function Dashboard() {
   }, []);
 
   const handleToggleTrackNavGuide = useCallback(() => {
-    setTrackNavGuideActive((prev) => {
-      if (prev) return false;
+    if (trackNavGuideActive) {
+      setTrackNavGuideActive(false);
+    } else {
+      setTrackNavGuideActive(true);
       setTrackNavLegIndex(0);
       setTrackNavArrivedFinal(false);
       setShowTodayTrackReplayOnMap(true);
       setTrackNavModalOpen(false);
       setRouteMapEditorMode(null);
-      return true;
-    });
-  }, []);
+    }
+  }, [trackNavGuideActive]);
 
   const handleResetTrackNavOrigin = useCallback(() => {
     setTrackNavLegIndex(0);
@@ -2741,11 +2742,9 @@ export default function Dashboard() {
               disabled={!showTodayTrackReplayOnMap && displayReplayPath.length < 2}
               onClick={() => {
                 if (!showTodayTrackReplayOnMap && displayReplayPath.length < 2) return;
-                setShowTodayTrackReplayOnMap((v) => {
-                  const on = !v;
-                  if (!on) setTrackNavGuideActive(false);
-                  return on;
-                });
+                const nextOn = !showTodayTrackReplayOnMap;
+                setShowTodayTrackReplayOnMap(nextOn);
+                if (!nextOn) setTrackNavGuideActive(false);
                 setMapFitNonce((n) => n + 1);
               }}
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-fuchsia-100/90 transition-colors hover:border-fuchsia-400/50 hover:bg-fuchsia-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/30 disabled:cursor-not-allowed disabled:opacity-40 ${

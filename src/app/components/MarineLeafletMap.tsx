@@ -130,28 +130,33 @@ function MapFitBounds({
   useEffect(() => {
     if (lastFitNonceRef.current === fitNonce) return;
     lastFitNonceRef.current = fitNonce;
-    map.invalidateSize();
-    let pts = pointsRef.current;
-    if (pts.length === 0) pts = [opsCenterTuple() as L.LatLngExpression];
-    const b = L.latLngBounds(pts);
-    if (b.isValid()) {
-      if (pts.length === 1) {
-        const p = pts[0];
-        const lat = Array.isArray(p) ? p[0] : p.lat;
-        const lng = Array.isArray(p) ? p[1] : p.lng;
-        map.setView([lat, lng], 15, { animate: false });
-      } else {
-        map.fitBounds(b, {
-          padding: [2, 2],
-          maxZoom: 18,
-          animate: false,
-        });
+    /** React 렌더·커밋 사이클이 끝난 뒤 Leaflet 조작 — 동기 실행 시 Leaflet 이벤트가
+     *  React 렌더와 충돌해 에러 화면이 나는 것을 방지 */
+    const raf = requestAnimationFrame(() => {
+      map.invalidateSize();
+      let pts = pointsRef.current;
+      if (pts.length === 0) pts = [opsCenterTuple() as L.LatLngExpression];
+      const b = L.latLngBounds(pts);
+      if (b.isValid()) {
+        if (pts.length === 1) {
+          const p = pts[0];
+          const lat = Array.isArray(p) ? p[0] : p.lat;
+          const lng = Array.isArray(p) ? p[1] : p.lng;
+          map.setView([lat, lng], 15, { animate: false });
+        } else {
+          map.fitBounds(b, {
+            padding: [2, 2],
+            maxZoom: 18,
+            animate: false,
+          });
+        }
       }
-    }
-    const extra = Math.max(0, Math.min(4, postFitZoomLevels));
-    if (extra > 0) {
-      map.setZoom(Math.min(18, map.getZoom() + extra), { animate: false });
-    }
+      const extra = Math.max(0, Math.min(4, postFitZoomLevels));
+      if (extra > 0) {
+        map.setZoom(Math.min(18, map.getZoom() + extra), { animate: false });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [fitNonce, map, postFitZoomLevels]);
   return null;
 }
@@ -277,20 +282,25 @@ function WaypointEditorMarker({
     [index],
   );
 
+  const stableEventHandlers = useMemo(
+    () => ({
+      dragend: (e: L.LeafletMouseEvent) => {
+        const t = e.target as L.Marker;
+        const ll = t.getLatLng?.();
+        if (!ll) return;
+        onVertexDragEnd(index, ll.lat, ll.lng);
+      },
+    }),
+    [index, onVertexDragEnd],
+  );
+
   return (
     <Marker
       position={stablePosition}
       icon={icon}
       draggable
       zIndexOffset={1400}
-      eventHandlers={{
-        dragend: (e) => {
-          const t = e.target as L.Marker;
-          const ll = t.getLatLng?.();
-          if (!ll) return;
-          onVertexDragEnd(index, ll.lat, ll.lng);
-        },
-      }}
+      eventHandlers={stableEventHandlers}
     >
       <Popup>
         <div className="min-w-[10.5rem] space-y-2 p-0.5 text-xs text-slate-800">
