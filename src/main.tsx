@@ -2,7 +2,8 @@ import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from "
 import { createRoot } from "react-dom/client";
 import Dashboard from "./app/Dashboard.tsx";
 import LoginPage from "./app/LoginPage.tsx";
-import MobileDeckView, { isMobileDeckPath } from "./app/MobileDeckView.tsx";
+import MobileDeckView from "./app/MobileDeckView.tsx";
+import { shouldUseMobileDeckLayout } from "@/lib/mobile-deck-mode";
 import {
   SITE_DEPRECATED_PREVIEW_HOST,
   SITE_PRODUCTION_ORIGIN,
@@ -23,12 +24,19 @@ function DeprecatedHostRedirect() {
 
 function Root() {
   const [authed, setAuthed] = useState(false);
-  const [mobileDeck, setMobileDeck] = useState(() => isMobileDeckPath());
+  const [mobileDeck, setMobileDeck] = useState(() => shouldUseMobileDeckLayout());
 
   useEffect(() => {
-    const sync = () => setMobileDeck(isMobileDeckPath());
+    const sync = () => setMobileDeck(shouldUseMobileDeckLayout());
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
+    window.addEventListener("resize", sync);
+    const mql = window.matchMedia(`(max-width: ${768 - 1}px)`);
+    mql.addEventListener("change", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("resize", sync);
+      mql.removeEventListener("change", sync);
+    };
   }, []);
 
   return (

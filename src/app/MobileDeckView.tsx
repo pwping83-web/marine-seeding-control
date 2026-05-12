@@ -1,12 +1,21 @@
 /**
  * 함정·현장용 초간단 모바일 화면 — 지도에 내 위치, 살포 시작/중지·AI·안전·금일 건수만.
- * 경로: `/mobile` (로그인 후). 관제 대시보드와 `ship_command_logs` / BroadcastChannel 으로 살포 신호 동기.
+ * 로그인 후: URL이 `/mobile` 이거나 가로 768px 미만이면 자동으로 이 화면.
+ * 관제 대시보드와 `ship_command_logs` / BroadcastChannel 으로 살포 신호 동기.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
-import { Anchor, Brain, CircleSlash, Play, ShieldAlert, Sprout } from "lucide-react";
+import {
+  Brain,
+  CircleSlash,
+  LocateFixed,
+  Play,
+  ShieldAlert,
+  Sprout,
+} from "lucide-react";
 import { OPS_AREA_CENTER } from "./geo/koreaOpsArea";
+import { AiTicker } from "./components/AiTicker";
 import { TILE_ATTR, TILE_CARTO_DARK } from "./components/MarineLeafletMap";
 import {
   insertShipCommand,
@@ -17,14 +26,17 @@ import {
 import { MARINE_OPS_SIGNAL_BC } from "@/lib/marine-ops-signals";
 import {
   assessEmergency,
+  buildDeparturePlan,
   fetchKmaForecast,
   generateMockForecast,
   isKmaApiConfigured,
   pickCurrentOrNextKmaSlot,
   sortKmaSlotsByTime,
   estimatedVisibilityKmFromSlot,
+  type SlotScore,
 } from "@/lib/kma-weather";
 import { analyzeWeatherWithGroq, isGroqConfigured } from "@/lib/groq-weather";
+import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
 import { endOfDayMs, startOfDayMs, ymdLocal } from "@/lib/seeding-day-eval";
 
 const VESSEL_DEFAULT = "제3해양살포함";
@@ -34,17 +46,43 @@ function vesselLteIdFromEnv(): string {
   return v && v.length > 0 ? v : VESSEL_DEFAULT;
 }
 
-function isMobileDeckPath(): boolean {
-  if (typeof window === "undefined") return false;
-  const p = window.location.pathname.replace(/\/$/, "") || "/";
-  return p.endsWith("/mobile");
+function geolocationErrorMessage(err: GeolocationPositionError): string {
+  switch (err.code) {
+    case err.PERMISSION_DENIED:
+      return "위치 권한이 거부되었습니다. 주소창 왼쪽에서 위치를 허용해 주세요.";
+    case err.POSITION_UNAVAILABLE:
+      return "위치를 확인할 수 없습니다. GPS·실내에서는 창가로 이동해 보세요.";
+    case err.TIMEOUT:
+      return "위치 요청 시간이 초과되었습니다. 다시 눌러 주세요.";
+    default:
+      return err.message || "위치 정보를 가져오지 못했습니다.";
+  }
 }
 
-function MapFollowUser({ lat, lng, zoom }: { lat: number; lng: number; zoom: number }) {
+/** Geolocation API 는 보안 컨텍스트(HTTPS·localhost)에서만 동작 */
+function canUseBrowserGeolocation(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (!navigator.geolocation) return false;
+  if (window.isSecureContext) return true;
+  const h = window.location.hostname;
+  return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+}
+
+function MapFollowUser({
+  lat,
+  lng,
+  zoom,
+  recenterNonce,
+}: {
+  lat: number;
+  lng: number;
+  zoom: number;
+  recenterNonce: number;
+}) {
   const map = useMap();
   useEffect(() => {
     map.setView([lat, lng], Math.max(map.getZoom(), zoom), { animate: true });
-  }, [lat, lng, zoom, map]);
+  }, [lat, lng, zoom, map, recenterNonce]);
   return null;
 }
 
@@ -61,6 +99,14 @@ export default function MobileDeckView() {
   const [aiText, setAiText] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
+  /** 버튼으로 즉시 재측정·지도 재맞춤(좌표 동일해도 pan 되도록 nonce) */
+  const [recenterNonce, setRecenterNonce] = useState(0);
+  const [locating, setLocating] = useState(false);
+  const [slotScores, setSlotScores] = useState<SlotScore[]>([]);
+  const [tickerEnv, setTickerEnv] = useState({ wind: 0, wave: 0, temp: 18 });
+  const [groqSummary, setGroqSummary] = useState("");
+  const groqTickerLastRef = useRef(0);
+  const firstGpsCenterRef = useRef(false);
 
   const center = useMemo<[number, number]>(
     () => (pos ? [pos.lat, pos.lng] : [OPS_AREA_CENTER.lat, OPS_AREA_CENTER.lng]),
@@ -71,6 +117,21 @@ export default function MobileDeckView() {
     if (isKmaApiConfigured()) return "지금: 단기예보 동기화(주기 갱신)";
     return "지금: 목업(API 미설정)";
   }, []);
+
+  const nowSlotForRec = useMemo(() => {
+    if (slotScores.length === 0) return null;
+    return pickCurrentOrNextKmaSlot(slotScores.map((s) => s.slot));
+  }, [slotScores]);
+
+  const workLocalRec = useMemo(
+    () =>
+      buildLocalWorkRecommendation(slotScores, level, tickerEnv.wind, tickerEnv.wave, {
+        tempC: tickerEnv.temp,
+        popPct: nowSlotForRec?.pop,
+        ptyCode: nowSlotForRec?.ptyCode,
+      }),
+    [slotScores, level, tickerEnv, nowSlotForRec],
+  );
 
   const refreshTodayCount = useCallback(async () => {
     if (!marineDbEnabled()) {
@@ -91,6 +152,16 @@ export default function MobileDeckView() {
   const refreshSafety = useCallback(async () => {
     let slots = await fetchKmaForecast();
     if (!slots?.length) slots = sortKmaSlotsByTime(generateMockForecast());
+    else slots = sortKmaSlotsByTime(slots);
+    if (!slots.length) {
+      setSlotScores([]);
+      setLevel("안전");
+      setLevelMsg("예보 없음");
+      setTriggerLines("");
+      return;
+    }
+    const plan = buildDeparturePlan(slots);
+    setSlotScores(plan.allScores);
     const now = pickCurrentOrNextKmaSlot(slots);
     if (!now) {
       setLevel("안전");
@@ -98,6 +169,7 @@ export default function MobileDeckView() {
       setTriggerLines("");
       return;
     }
+    setTickerEnv({ wind: now.windSpeed, wave: now.waveHeight, temp: now.temp });
     const a = assessEmergency({
       windSpeed: now.windSpeed,
       windDir: now.windDir,
@@ -113,20 +185,72 @@ export default function MobileDeckView() {
     setTriggerLines(a.triggers.length ? a.triggers.join(" · ") : "특이 조건 없음");
   }, []);
 
+  /** 관제 Dashboard 와 유사: 먼저 한 번 고정밀 조회 후 watch — 모바일 첫 위치·권한에 유리 */
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setGeoErr("위치를 사용할 수 없습니다.");
+    if (!canUseBrowserGeolocation()) {
+      setGeoErr(
+        typeof navigator !== "undefined" && navigator.geolocation
+          ? "위치 기능은 HTTPS 또는 localhost 에서만 동작합니다."
+          : "이 브라우저는 위치 정보를 지원하지 않습니다.",
+      );
       return;
     }
-    const id = navigator.geolocation.watchPosition(
+    let cancelled = false;
+    const applyCoords = (c: GeolocationCoordinates) => {
+      if (cancelled) return;
+      setGeoErr(null);
+      setPos({ lat: c.latitude, lng: c.longitude });
+      if (!firstGpsCenterRef.current) {
+        firstGpsCenterRef.current = true;
+        setRecenterNonce((n) => n + 1);
+      }
+    };
+    const onErr = (e: GeolocationPositionError) => {
+      if (cancelled) return;
+      setGeoErr(geolocationErrorMessage(e));
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (p) => applyCoords(p.coords),
+      onErr,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 45_000 },
+    );
+
+    const watchId = navigator.geolocation.watchPosition(
+      (p) => applyCoords(p.coords),
+      onErr,
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 60_000 },
+    );
+
+    return () => {
+      cancelled = true;
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
+
+  const requestLocateNow = useCallback(() => {
+    if (!canUseBrowserGeolocation()) {
+      setGeoErr(
+        typeof navigator !== "undefined" && navigator.geolocation
+          ? "위치 기능은 HTTPS 또는 localhost 에서만 동작합니다."
+          : "이 기기에서는 위치를 사용할 수 없습니다.",
+      );
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
       (p) => {
         setGeoErr(null);
         setPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+        setRecenterNonce((n) => n + 1);
+        setLocating(false);
       },
-      (e) => setGeoErr(e.message),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20_000 },
+      (e) => {
+        setGeoErr(geolocationErrorMessage(e));
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 45_000 },
     );
-    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   useEffect(() => {
@@ -140,6 +264,57 @@ export default function MobileDeckView() {
     const id = window.setInterval(() => void refreshSafety(), 60_000);
     return () => window.clearInterval(id);
   }, [refreshSafety]);
+
+  /** 관제 상단과 동일 — Groq 요약을 자막 티커에 반영 */
+  useEffect(() => {
+    if (!isGroqConfigured()) {
+      setGroqSummary("");
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      const t = Date.now();
+      if (t - groqTickerLastRef.current < 8000) return;
+      let slots = await fetchKmaForecast();
+      if (!slots?.length) slots = sortKmaSlotsByTime(generateMockForecast());
+      else slots = sortKmaSlotsByTime(slots);
+      const src = pickCurrentOrNextKmaSlot(slots);
+      if (!src || cancelled) return;
+      groqTickerLastRef.current = Date.now();
+      const assessment = assessEmergency({
+        windSpeed: src.windSpeed,
+        windDir: src.windDir,
+        waveHeight: src.waveHeight,
+        ptyCode: src.ptyCode,
+        pcp: src.pcp,
+        temp: src.temp,
+        pop: src.pop,
+        sky: src.sky,
+      });
+      const vis = estimatedVisibilityKmFromSlot(src);
+      try {
+        const rep = await analyzeWeatherWithGroq({
+          windSpeed: src.windSpeed,
+          waveHeight: src.waveHeight,
+          temp: src.temp,
+          pop: src.pop,
+          visibility: vis,
+          assessment,
+          minutesToDanger: null,
+          nowcastContext: weatherNowcastNote,
+        });
+        if (!cancelled && rep) setGroqSummary(rep.summary);
+      } catch {
+        /* 틱 실패는 조용히 무시 */
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 120_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [weatherNowcastNote]);
 
   useEffect(() => {
     const apply = (cmd: string) => {
@@ -222,6 +397,7 @@ export default function MobileDeckView() {
           ? `${rep.summary}\n\n${rep.detail}\n\n권고: ${rep.action}`
           : `${assessment.level}: ${assessment.message}`,
       );
+      if (rep) setGroqSummary(rep.summary);
     } catch {
       setAiText("분석 중 오류가 났습니다.");
     } finally {
@@ -236,6 +412,14 @@ export default function MobileDeckView() {
         ? { bg: "bg-amber-600/95", ring: "ring-amber-300/50", label: "주의" }
         : { bg: "bg-emerald-800/90", ring: "ring-emerald-400/35", label: "양호" };
 
+  /** 함교 패널 느낌 — 상단 스펙큘러 + 아이콘 베젤 */
+  const padFrame =
+    "group relative flex min-h-[58px] flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border px-2 py-2.5 text-center outline-none transition-[transform,box-shadow] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40";
+  const padGloss =
+    "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent";
+  const padIconShell =
+    "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-white/12";
+
   return (
     <div className="flex h-svh min-h-0 flex-col bg-[#050f18] text-slate-100">
       <header
@@ -245,11 +429,23 @@ export default function MobileDeckView() {
           background: "linear-gradient(180deg, #0c2748 0%, #081b34 100%)",
         }}
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <Anchor className="h-5 w-5 shrink-0 text-teal-400" aria-hidden />
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <img
+            src="/logo.svg"
+            width={32}
+            height={32}
+            className="h-8 w-8 shrink-0 rounded-lg object-contain"
+            alt=""
+            decoding="async"
+            style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.35)" }}
+          />
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold tracking-tight">함정 모바일</p>
-            <p className="truncate text-[10px] text-slate-500">{vesselLteIdFromEnv()}</p>
+            <p className="truncate text-[13px] font-bold leading-tight tracking-tight text-white">
+              해양 종자 살포 관제
+            </p>
+            <p className="truncate text-[10px] leading-tight text-slate-400">
+              {vesselLteIdFromEnv()} · 함정
+            </p>
           </div>
         </div>
         <a
@@ -259,6 +455,17 @@ export default function MobileDeckView() {
           관제 전체
         </a>
       </header>
+
+      <AiTicker
+        vesselName={vesselLteIdFromEnv()}
+        safetyLevel={level}
+        groqSummary={groqSummary}
+        aiMsg={levelMsg}
+        windSpeed={tickerEnv.wind}
+        waveHeight={tickerEnv.wave}
+        temp={tickerEnv.temp}
+        attachmentCue={workLocalRec.attachmentTickerCue}
+      />
 
       <div className="relative min-h-0 flex-1">
         <MapContainer
@@ -281,7 +488,7 @@ export default function MobileDeckView() {
                   weight: 2,
                 }}
               />
-              <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} />
+              <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} recenterNonce={recenterNonce} />
             </>
           ) : null}
         </MapContainer>
@@ -305,6 +512,23 @@ export default function MobileDeckView() {
             <p className="mt-1 line-clamp-2 text-[10px] font-normal leading-snug opacity-95">{levelMsg}</p>
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void requestLocateNow()}
+          disabled={locating || !canUseBrowserGeolocation()}
+          className="pointer-events-auto absolute bottom-3 right-3 z-[500] flex min-h-[48px] min-w-[48px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-teal-400/35 bg-[#071a2e]/95 px-3 py-2 text-[10px] font-bold text-teal-100 shadow-[inset_0_1px_0_rgba(167,243,208,0.12),0_8px_24px_-4px_rgba(0,0,0,0.5)] backdrop-blur-sm active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45"
+          style={{ marginBottom: "max(0px, env(safe-area-inset-bottom, 0px))" }}
+          aria-label="현재 위치 찾기 — GPS로 다시 맞춤"
+        >
+          <LocateFixed
+            className={`h-5 w-5 shrink-0 text-cyan-300 ${locating ? "animate-pulse" : ""}`}
+            aria-hidden
+          />
+          <span className="max-w-[4.5rem] leading-tight">
+            {locating ? "잡는 중…" : "현재 위치 찾기"}
+          </span>
+        </button>
       </div>
 
       <section
@@ -331,32 +555,45 @@ export default function MobileDeckView() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-2xl border border-teal-500/15 bg-gradient-to-b from-[#071422]/95 to-[#030910]/90 p-1.5 shadow-[inset_0_1px_0_rgba(45,212,191,0.06),0_0_0_1px_rgba(0,0,0,0.35)]">
+          <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
             disabled={sending || seedingActive}
             onClick={() => void sendCmd("seed_start")}
-            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl border border-emerald-500/40 bg-emerald-950/60 py-2 text-sm font-bold text-emerald-100 shadow disabled:opacity-40 active:scale-[0.98]"
+            className={`${padFrame} border-cyan-400/35 bg-gradient-to-b from-teal-900/55 via-emerald-950/70 to-[#020a0e] text-cyan-50 shadow-[inset_0_1px_0_rgba(167,243,208,0.14),0_0_0_1px_rgba(45,212,191,0.12),0_10px_28px_-10px_rgba(20,184,166,0.45)]`}
           >
-            <Play className="h-5 w-5" fill="currentColor" />
-            살포 시작
+            <span className={padGloss} aria-hidden />
+            <span className={`${padIconShell} text-teal-300`}>
+              <Play className="h-4 w-4 drop-shadow-[0_0_6px_rgba(45,212,191,0.6)]" fill="currentColor" aria-hidden />
+            </span>
+            <span className="text-[11px] font-black tracking-tight">살포 시작</span>
+            <span className="text-[8px] font-semibold tracking-wide text-teal-300/55">작전 개시</span>
           </button>
           <button
             type="button"
             disabled={sending || !seedingActive}
             onClick={() => void sendCmd("seed_stop")}
-            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-500/40 bg-slate-900/80 py-2 text-sm font-bold text-slate-100 shadow disabled:opacity-40 active:scale-[0.98]"
+            className={`${padFrame} border-slate-500/45 bg-gradient-to-b from-slate-800/75 via-slate-950/90 to-[#030508] text-slate-100 shadow-[inset_0_1px_0_rgba(148,163,184,0.08),0_8px_22px_-12px_rgba(0,0,0,0.65)]`}
           >
-            <CircleSlash className="h-5 w-5" />
-            살포 중지
+            <span className={padGloss} aria-hidden />
+            <span className={`${padIconShell} text-slate-300 ring-rose-900/40`}>
+              <CircleSlash className="h-4 w-4 text-rose-300/95" strokeWidth={2.25} aria-hidden />
+            </span>
+            <span className="text-[11px] font-black tracking-tight">살포 중지</span>
+            <span className="text-[8px] font-semibold tracking-wide text-slate-500">작전 정지</span>
           </button>
           <button
             type="button"
             onClick={() => void runAiBrief()}
-            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl border border-violet-500/40 bg-violet-950/55 py-2 text-sm font-bold text-violet-100 shadow active:scale-[0.98]"
+            className={`${padFrame} border-indigo-400/30 bg-gradient-to-b from-indigo-950/70 via-[#0c1628] to-[#050a12] text-indigo-50 shadow-[inset_0_1px_0_rgba(165,180,252,0.12),0_0_0_1px_rgba(99,102,241,0.15),0_10px_26px_-8px_rgba(79,70,229,0.35)]`}
           >
-            <Brain className="h-5 w-5" />
-            AI 현재 상황
+            <span className={padGloss} aria-hidden />
+            <span className={`${padIconShell} text-violet-300 ring-cyan-500/15`}>
+              <Brain className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </span>
+            <span className="text-[11px] font-black tracking-tight">AI 현재 상황</span>
+            <span className="text-[8px] font-semibold tracking-wide text-violet-300/50">기상·해역 요약</span>
           </button>
           <button
             type="button"
@@ -364,16 +601,17 @@ export default function MobileDeckView() {
               void refreshSafety();
               setDangerOpen(true);
             }}
-            className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl border py-2 text-sm font-bold text-white shadow ring-2 active:scale-[0.98] ${dangerUi.bg} ${dangerUi.ring}`}
+            className={`${padFrame} border-white/10 py-2.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-2 ring-inset ${dangerUi.bg} ${dangerUi.ring}`}
           >
-            <ShieldAlert className="h-5 w-5" />
-            지금 위험
+            <span className={padGloss} aria-hidden />
+            <span className={`${padIconShell} bg-black/25 text-white`}>
+              <ShieldAlert className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+            </span>
+            <span className="text-[11px] font-black tracking-tight">지금 위험</span>
+            <span className="text-[8px] font-semibold tracking-wide text-white/60">안전 감시</span>
           </button>
+          </div>
         </div>
-        <p className="mt-2 px-1 text-center text-[9px] leading-snug text-slate-500">
-          블루투스 거치대로 버튼 원격 누르기는 추후 연동 예정 —{" "}
-          <span className="text-slate-400">docs/기획-연동-초안</span> 참고
-        </p>
       </section>
 
       {aiOpen ? (
@@ -447,5 +685,3 @@ export default function MobileDeckView() {
     </div>
   );
 }
-
-export { isMobileDeckPath };
