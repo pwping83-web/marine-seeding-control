@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { OPS_AREA_CENTER } from "./geo/koreaOpsArea";
 import { AiTicker } from "./components/AiTicker";
+import { AiWeatherJoltBanner } from "./components/AiWeatherJoltBanner";
+import { forceAiTickerSpeechUnmuteForCrew } from "@/lib/ai-ticker-speech-prefs";
 import { TILE_ATTR, TILE_CARTO_DARK } from "./components/MarineLeafletMap";
 import {
   insertShipCommand,
@@ -433,6 +435,7 @@ export default function MobileDeckView() {
   );
 
   const runAiBrief = useCallback(async () => {
+    forceAiTickerSpeechUnmuteForCrew();
     setAiOpen(true);
     setAiLoading(true);
     setAiText("");
@@ -548,16 +551,23 @@ export default function MobileDeckView() {
         </a>
       </header>
 
-      <AiTicker
-        vesselName={vesselLteIdFromEnv()}
-        safetyLevel={level}
-        groqSummary={groqSummary}
-        aiMsg={levelMsg}
-        windSpeed={tickerEnv.wind}
-        waveHeight={tickerEnv.wave}
-        temp={tickerEnv.temp}
-        attachmentCue={workLocalRec.attachmentTickerCue}
-      />
+      <div className="flex w-full shrink-0 flex-col">
+        <AiWeatherJoltBanner
+          windSpeedMps={tickerEnv.wind}
+          waveHeightM={tickerEnv.wave}
+          safetyLevel={level}
+        />
+        <AiTicker
+          vesselName={vesselLteIdFromEnv()}
+          safetyLevel={level}
+          groqSummary={groqSummary}
+          aiMsg={levelMsg}
+          windSpeed={tickerEnv.wind}
+          waveHeight={tickerEnv.wave}
+          temp={tickerEnv.temp}
+          attachmentCue={workLocalRec.attachmentTickerCue}
+        />
+      </div>
 
       <div className="relative min-h-0 flex-1">
         <MapContainer

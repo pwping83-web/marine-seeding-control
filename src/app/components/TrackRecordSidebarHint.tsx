@@ -1,11 +1,11 @@
 /**
- * 사이드바「항적 기록」행 가운데 — 배가 지나온 경로를 직관적으로 암시하는 미니 시각.
+ * 사이드바「항로 길안내」행 가운데 — 경로를 따라가는 느낌으로 네비·길안내 목적을 암시하는 미니 시각.
  */
 export function TrackRecordSidebarHint() {
   return (
     <div
       className="pointer-events-none flex min-h-[22px] min-w-0 flex-1 select-none items-center justify-center px-0.5"
-      title="선박이 지나온 항적·살포 지점을 표와 지도에서 확인합니다"
+      title="지도·항로 안내로 이어지는 경로를 떠올리게 합니다. 상세 수치·보고는 오른쪽 보고 버튼에서 확인합니다"
       aria-hidden
     >
       <style>{`

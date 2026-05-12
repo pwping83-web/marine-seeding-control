@@ -8,6 +8,7 @@ import {
   Eye,
   FileSpreadsheet,
   List,
+  Navigation2,
   Printer,
   Sun,
   Thermometer,
@@ -320,7 +321,7 @@ export function TodayTrackReportModal({
     }
     const { start, end } = rangeNorm;
     const tag = start === end ? start : `${start}_${end}`;
-    downloadText(`${dlPrefix}항적기록_평가요약_${tag}.csv`, rows.join("\n"), "text/csv");
+    downloadText(`${dlPrefix}항로길안내_평가요약_${tag}.csv`, rows.join("\n"), "text/csv");
   }, [reportDrops, rangeNorm, weather, pathLatLng, vesselLat, vesselLng, dlPrefix, useTestSample]);
 
   if (!open) return null;
@@ -351,15 +352,16 @@ export function TodayTrackReportModal({
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-teal-400/35 bg-teal-500/15 text-teal-100"
               aria-hidden
             >
-              <Waypoints className="h-4 w-4" />
+              <Navigation2 className="h-4 w-4" />
             </span>
             <div className="min-w-0">
               <h2 id="track-report-title" className="text-sm font-bold tracking-tight text-white sm:text-[15px]">
-                항적 기록
+                운항·길안내 참고
               </h2>
               <p className="truncate text-[10px] text-cyan-200/65">
                 {vesselName}
                 {useTestSample ? " · 테스트 샘플(살포·LTE)" : " · 실제 이력 · 기상 기반 추정"}
+                {" · 실시간 길안내는 사이드바 항로 길안내(내비)에서"}
               </p>
             </div>
           </div>
@@ -438,7 +440,7 @@ export function TodayTrackReportModal({
             <CollapseBtn
               open={openSummary}
               onClick={() => setOpenSummary((v) => !v)}
-              label="한눈에 보기 — 항적·살포 요약 표"
+              label="한눈에 보기 — 경로·살포 요약(길안내 참고)"
               icon={<Waypoints className="h-3.5 w-3.5" aria-hidden />}
             />
             {openSummary ? (

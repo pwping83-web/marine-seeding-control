@@ -74,7 +74,8 @@ export function SeagrassMap({
   gpsVessel,
   gpsError,
 }: Props) {
-  const [zoomRail, setZoomRail] = useState(0);
+  const [mapZoomInNonce, setMapZoomInNonce] = useState(0);
+  const [mapZoomOutNonce, setMapZoomOutNonce] = useState(0);
   const [fitNonce, setFitNonce] = useState(1);
   const hadGpsFixRef = useRef(false);
 
@@ -139,14 +140,16 @@ export function SeagrassMap({
         <MarineLeafletMap
           basemap="dark"
           center={[BASE_LAT, BASE_LNG]}
-          zoomRail={zoomRail}
+          mapZoomInNonce={mapZoomInNonce}
+          mapZoomOutNonce={mapZoomOutNonce}
+          postFitZoomLevels={0}
           fitNonce={fitNonce}
           drops={leafletDrops}
           vessel={vesselPos}
           pathLatLng={pathLatLng}
           vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
           panMapToVesselOnMove={isRealWithGps}
-          fitToVesselOnly={isRealWithGps}
+          fitToVesselOnly={isRealWithGps || mapMode === "test"}
           hideVesselMarker={awaitingGps}
           maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
         />
@@ -224,7 +227,7 @@ export function SeagrassMap({
           <button
             type="button"
             aria-label="Zoom in"
-            onClick={() => setZoomRail((z) => Math.min(4, z + 1))}
+            onClick={() => setMapZoomInNonce((n) => n + 1)}
             className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
           >
             <Plus className="w-4 h-4" strokeWidth={2.25} />
@@ -233,7 +236,7 @@ export function SeagrassMap({
           <button
             type="button"
             aria-label="Zoom out"
-            onClick={() => setZoomRail((z) => Math.max(0, z - 1))}
+            onClick={() => setMapZoomOutNonce((n) => n + 1)}
             className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
           >
             <Minus className="w-4 h-4" strokeWidth={2.25} />
@@ -244,7 +247,8 @@ export function SeagrassMap({
           type="button"
           aria-label="Recenter map"
           onClick={() => {
-            setZoomRail(0);
+            setMapZoomInNonce(0);
+            setMapZoomOutNonce(0);
             setFitNonce((n) => n + 1);
           }}
           className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-[0_4px_14px_rgba(11,37,69,0.12)] border border-slate-200/80 text-slate-700 hover:text-[#0B2545] hover:bg-slate-50 transition-colors"
@@ -273,38 +277,52 @@ export function SeagrassMap({
         </div>
       </div>
 
-      {/* 내 위치 찾기: 꺼짐 선박 / 켜짐 GPS */}
+      {/* 테스트 / 실제 모드 세그먼트 스위치 */}
       <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-1">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={mapMode === "real"}
-          title={
-            mapMode === "real"
-              ? "끄면 선박 위치·항적으로 돌아갑니다"
-              : "켜면 브라우저로 현재 위치를 찾아 표시합니다"
-          }
-          onClick={() => {
-            if (mapMode === "real") {
-              onMapModeChange("test");
-              setZoomRail(0);
-              setFitNonce((n) => n + 1);
-              return;
-            }
-            onMapModeChange("real");
-          }}
-          className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[10px] font-semibold shadow-md backdrop-blur-sm transition-colors ${
-            mapMode === "real"
-              ? "border-cyan-600 bg-cyan-600 text-white"
-              : "border-slate-200/90 bg-white/95 text-slate-700 hover:bg-slate-50"
-          }`}
+        <div
+          role="group"
+          aria-label="Map position mode"
+          className="flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-md backdrop-blur-sm"
         >
-          <Crosshair
-            className={`h-4 w-4 shrink-0 stroke-[2.25] ${mapMode === "real" ? "text-white" : "text-slate-600"}`}
-            aria-hidden
-          />
-          <span className="leading-none">내 위치 찾기</span>
-        </button>
+          <button
+            type="button"
+            aria-pressed={mapMode === "test"}
+            title="Simulation — demo vessel and ops area"
+            onClick={() => {
+              if (mapMode === "test") return;
+              onMapModeChange("test");
+              setMapZoomInNonce(0);
+              setMapZoomOutNonce(0);
+              setFitNonce((n) => n + 1);
+            }}
+            className={`rounded-md px-3 py-2 text-[10px] font-bold transition-colors ${
+              mapMode === "test"
+                ? "bg-slate-700 text-teal-100 shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            }`}
+          >
+            테스트
+          </button>
+          <button
+            type="button"
+            aria-pressed={mapMode === "real"}
+            title="Browser geolocation (permission required)"
+            onClick={() => {
+              if (mapMode === "real") return;
+              onMapModeChange("real");
+              setMapZoomInNonce(0);
+              setMapZoomOutNonce(0);
+              setFitNonce((n) => n + 1);
+            }}
+            className={`rounded-md px-3 py-2 text-[10px] font-bold transition-colors ${
+              mapMode === "real"
+                ? "bg-cyan-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            }`}
+          >
+            실제
+          </button>
+        </div>
         {gpsError ? (
           <p className="max-w-[11rem] rounded border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-900 shadow-sm">
             {gpsError}

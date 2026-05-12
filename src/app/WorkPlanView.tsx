@@ -5,6 +5,7 @@ import {
   Plus, X, CalendarPlus, Ban, RefreshCw,
 } from "lucide-react";
 import type { WorkEntry } from "./work-plan-types";
+import { INITIAL_WORK_SCHEDULE } from "@/lib/work-plan-initial-schedule";
 import {
   cancelWorkReservation,
   fetchWorkReservations,
@@ -55,22 +56,6 @@ const WAVE_LIMIT   = 1.5;
 const VIS_LIMIT    = 5;
 const PRECIP_LIMIT = 5;
 const KO_DAYS      = ["일", "월", "화", "수", "목", "금", "토"];
-
-const INITIAL_SCHEDULE: WorkEntry[] = [
-  { id: "w01", date: "2026-04-21", zone: "제2구역 A", targetSeeds: 850,  vessel: "제3해양살포함", status: "completed",     actual: 862 },
-  { id: "w02", date: "2026-04-24", zone: "제3구역 B", targetSeeds: 920,  vessel: "제3해양살포함", status: "completed",     actual: 905 },
-  { id: "w03", date: "2026-04-28", zone: "제3구역 C", targetSeeds: 780,  vessel: "제3해양살포함", status: "completed",     actual: 791 },
-  { id: "w04", date: "2026-04-30", zone: "제1구역 B", targetSeeds: 860,  vessel: "제3해양살포함", status: "completed",     actual: 848 },
-  { id: "w05", date: "2026-05-01", zone: "제3구역 B", targetSeeds: 900,  vessel: "제3해양살포함", status: "completed",     actual: 918 },
-  { id: "w06", date: "2026-05-07", zone: "제2구역 B", targetSeeds: 850,  vessel: "제3해양살포함", status: "weather-hold",  note: "풍속 19 kt 초과 — 익일 재예약" },
-  { id: "w07", date: "2026-05-08", zone: "제2구역 B", targetSeeds: 850,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w08", date: "2026-05-12", zone: "제1구역 A", targetSeeds: 960,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w09", date: "2026-05-15", zone: "제3구역 A", targetSeeds: 800,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w10", date: "2026-05-20", zone: "제2구역 C", targetSeeds: 880,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w11", date: "2026-05-22", zone: "제3구역 B", targetSeeds: 920,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w12", date: "2026-05-27", zone: "제1구역 B", targetSeeds: 750,  vessel: "제3해양살포함", status: "scheduled" },
-  { id: "w13", date: "2026-05-29", zone: "제2구역 A", targetSeeds: 900,  vessel: "제3해양살포함", status: "scheduled" },
-];
 
 const ZONE_OPTIONS = [
   "제1구역 A", "제1구역 B", "제1구역 C",
@@ -335,13 +320,16 @@ const WORK_CFG = {
 export default function WorkPlanView({
   weather,
   variant = "full",
+  /** 증가할 때마다 예약 목록을 초기 시드(또는 DB 재조회)로 맞춤 — 대시보드「전체 초기화」 */
+  scheduleResetKey = 0,
 }: {
   weather: WeatherState;
   /** compact: 제1구역 일정 중심·우측 지도와 연동용 심플 패널 */
   variant?: "full" | "compact";
+  scheduleResetKey?: number;
 }) {
   const [schedule, setSchedule] = useState<WorkEntry[]>(() =>
-    marineDbEnabled() ? [] : INITIAL_SCHEDULE,
+    marineDbEnabled() ? [] : INITIAL_WORK_SCHEDULE,
   );
   const [scheduleReady, setScheduleReady] = useState(!marineDbEnabled());
   const [selectedDay,   setSelectedDay]   = useState<number | null>(0);
@@ -379,32 +367,34 @@ export default function WorkPlanView({
 
   useEffect(() => {
     if (!marineDbEnabled()) {
+      if (scheduleResetKey > 0) setSchedule(INITIAL_WORK_SCHEDULE);
       setScheduleReady(true);
       return;
     }
+    setScheduleReady(false);
     let cancelled = false;
     (async () => {
       let rows = await fetchWorkReservations();
       if (cancelled) return;
       if (rows === null) {
-        if (!cancelled) setSchedule(INITIAL_SCHEDULE);
+        if (!cancelled) setSchedule(INITIAL_WORK_SCHEDULE);
         setScheduleReady(true);
         return;
       }
       if (rows.length === 0) {
-        await seedWorkReservations(INITIAL_SCHEDULE);
+        await seedWorkReservations(INITIAL_WORK_SCHEDULE);
         rows = await fetchWorkReservations();
       }
       if (!cancelled) {
         if (rows && rows.length > 0) setSchedule(rows);
-        else setSchedule(INITIAL_SCHEDULE);
+        else setSchedule(INITIAL_WORK_SCHEDULE);
       }
       setScheduleReady(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scheduleResetKey]);
 
   // 단기(D+0~D+2)는 기존 buildForecast, 중기(D+3~D+10)는 API 데이터로 합성
   const forecast = useMemo(() => {

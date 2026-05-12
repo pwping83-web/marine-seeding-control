@@ -1,6 +1,15 @@
 /**
- * 관제·모바일 공통 — 상단 AI 자막(마퀴) 티커
+ * 관제·모바일 공통 — 상단 AI 자막(마퀴) 티커 + 음성 안내(한국어 여성 음성 우선)
  */
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  AI_TICKER_SPEECH_FORCE_UNMUTE_EVENT,
+  AI_TICKER_SPEECH_MUTED_LS_KEY,
+  dispatchAiTickerSpeechMuteChanged,
+} from "@/lib/ai-ticker-speech-prefs";
+import { sanitizeTickerForSpeech, speakAiGuidance, stopAiGuidanceSpeech } from "@/lib/korean-tts";
 
 export function AiTicker({
   vesselName,
@@ -21,6 +30,28 @@ export function AiTicker({
   temp: number;
   attachmentCue: string;
 }) {
+  const [speechMuted, setSpeechMuted] = useState(false);
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const lastSpokenRef = useRef<string>("");
+
+  useEffect(() => {
+    try {
+      setSpeechMuted(localStorage.getItem(AI_TICKER_SPEECH_MUTED_LS_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+    setPrefsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const onForceUnmute = () => {
+      setSpeechMuted(false);
+      lastSpokenRef.current = "";
+    };
+    window.addEventListener(AI_TICKER_SPEECH_FORCE_UNMUTE_EVENT, onForceUnmute);
+    return () => window.removeEventListener(AI_TICKER_SPEECH_FORCE_UNMUTE_EVENT, onForceUnmute);
+  }, []);
+
   const color = safetyLevel === "긴급" ? "#fca5a5" : safetyLevel === "주의" ? "#fcd34d" : "#6ee7b7";
   const base = `${safetyLevel === "긴급" ? "🚨 즉시 회항 권고" : safetyLevel === "주의" ? "⚠️ 기상 주의" : "✅ 안전 운항"} · 풍속 ${windSpeed.toFixed(1)}m/s · 파고 ${waveHeight.toFixed(1)}m · 기온 ${temp.toFixed(0)}°C`;
   const g = groqSummary.trim();
@@ -34,6 +65,47 @@ export function AiTicker({
   const pauseSec = 30;
   const cycleSec = scrollSec + pauseSec;
   const scrollEndPct = (scrollSec / cycleSec) * 100;
+
+  useEffect(() => {
+    if (!prefsHydrated || speechMuted) return;
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const spokenKey = sanitizeTickerForSpeech(segment);
+    if (!spokenKey) return;
+    if (spokenKey === lastSpokenRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      const again = sanitizeTickerForSpeech(segment);
+      if (!again || again === lastSpokenRef.current) return;
+      lastSpokenRef.current = again;
+      void speakAiGuidance(segment, { queueCoalesce: true, interrupt: false });
+    }, 680);
+
+    return () => window.clearTimeout(timer);
+  }, [prefsHydrated, speechMuted, segment]);
+
+  useEffect(() => {
+    if (speechMuted) stopAiGuidanceSpeech();
+  }, [speechMuted]);
+
+  const toggleSpeechMuted = () => {
+    setSpeechMuted((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(AI_TICKER_SPEECH_MUTED_LS_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      dispatchAiTickerSpeechMuteChanged(next);
+      if (next) {
+        stopAiGuidanceSpeech();
+      } else {
+        lastSpokenRef.current = "";
+      }
+      return next;
+    });
+  };
 
   return (
     <div
@@ -75,10 +147,33 @@ export function AiTicker({
           }
         }
       `}</style>
-      <div className="relative w-full min-w-0 py-1.5">
-        <div className="ai-marquee-track text-[11px] font-semibold sm:text-[13px]" role="presentation" style={{ color }}>
-          {segment}
+      <div className="relative flex w-full min-w-0 items-stretch gap-0 py-1.5">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="ai-marquee-track text-[11px] font-semibold sm:text-[13px]" role="presentation" style={{ color }}>
+            {segment}
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={toggleSpeechMuted}
+          className="shrink-0 self-center px-1.5 py-0.5 text-[10px] font-semibold text-white/75 hover:bg-white/10 hover:text-white sm:px-2 sm:text-[11px]"
+          aria-pressed={speechMuted}
+          aria-label={
+            speechMuted
+              ? "읽어주기 켜기 — 전체 항해 인원이 들을 수 있습니다"
+              : "음소거 — 조용히 할 때"
+          }
+          title={
+            speechMuted
+              ? "읽어주기 켜기 — 전체 항해 인원이 들을 수 있게 합니다"
+              : "음소거 — AI 자막 음성만 끕니다. 켜 두면 자막이 바뀔 때마다 이어서 읽습니다(가능한 한 좋은 한국어 음성)."
+          }
+        >
+          <span className="tabular-nums" aria-hidden>
+            {speechMuted ? "🔇" : "🔊"}
+          </span>
+          <span className="ml-0.5 hidden min-[380px]:inline">{speechMuted ? "음소거" : "읽어주기"}</span>
+        </button>
       </div>
     </div>
   );

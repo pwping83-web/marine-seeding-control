@@ -1,4 +1,5 @@
 import type { WorkEntry } from "@/app/work-plan-types";
+import { INITIAL_WORK_SCHEDULE } from "@/lib/work-plan-initial-schedule";
 import { LOCAL_RECORDING_ONLY } from "@/lib/local-recording-mode";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -195,6 +196,73 @@ export async function deleteSeedDropRecord(id: string): Promise<boolean> {
     console.warn("[marine-db] delete seed_drop_records", error.message);
     return false;
   }
+  return true;
+}
+
+/** 시연·전체 초기화: 살포 기록 전부 삭제 */
+export async function deleteAllSeedDropRecords(): Promise<boolean> {
+  if (!marineDbEnabled()) return true;
+  const { error } = await getSupabase().from("seed_drop_records").delete().neq("id", "");
+  if (error) {
+    console.warn("[marine-db] delete all seed_drop_records", error.message);
+    return false;
+  }
+  return true;
+}
+
+/** 시연·전체 초기화: 해당 선박 LTE 궤적 전부 삭제 */
+export async function deleteAllVesselTrackPointsForVessel(vesselId: string): Promise<boolean> {
+  if (!marineDbEnabled()) return true;
+  const vid = vesselId.trim();
+  if (!vid) return false;
+  const { error } = await getSupabase().from("vessel_track_points").delete().eq("vessel_id", vid);
+  if (error) {
+    console.warn("[marine-db] delete vessel_track_points", error.message);
+    return false;
+  }
+  return true;
+}
+
+/** 시연·전체 초기화: 선박 신호 로그 중 vessel_id 일치 행 삭제(RLS·스키마에 따라 일부만 될 수 있음) */
+export async function deleteShipCommandLogsForVessel(vesselId: string): Promise<boolean> {
+  if (!marineDbEnabled()) return true;
+  const vid = vesselId.trim();
+  if (!vid) return false;
+  const { error } = await getSupabase().from("ship_command_logs").delete().eq("vessel_id", vid);
+  if (error) {
+    console.warn("[marine-db] delete ship_command_logs", error.message);
+    return false;
+  }
+  return true;
+}
+
+/** 시연·전체 초기화: 작업 예약 전부 삭제 */
+export async function deleteAllWorkReservations(): Promise<boolean> {
+  if (!marineDbEnabled()) return true;
+  const { error } = await getSupabase().from("work_reservations").delete().neq("id", "");
+  if (error) {
+    console.warn("[marine-db] delete all work_reservations", error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 관제 대시보드「전체 초기화」— 살포·궤적·신호·예약을 비운 뒤 시드 살포·기본 예약 일정을 다시 넣습니다.
+ */
+export async function resetMarineDashboardDemoData(opts: {
+  vesselId: string;
+  seedDrops: SeedDropInput[];
+}): Promise<boolean> {
+  if (!marineDbEnabled()) return true;
+  const vid = opts.vesselId.trim();
+  if (!vid || opts.seedDrops.length === 0) return false;
+  if (!(await deleteAllSeedDropRecords())) return false;
+  void (await deleteAllVesselTrackPointsForVessel(vid));
+  void (await deleteShipCommandLogsForVessel(vid));
+  if (!(await deleteAllWorkReservations())) return false;
+  if (!(await seedWorkReservations(INITIAL_WORK_SCHEDULE))) return false;
+  if (!(await seedSeedDropRecords(opts.seedDrops))) return false;
   return true;
 }
 

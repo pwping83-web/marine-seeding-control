@@ -15,17 +15,22 @@ import {
   Calendar,
   CheckCircle2,
   ClipboardList,
+  CloudLightning,
   Compass,
   Download,
   Droplets,
   Info,
+  Landmark,
   Map as MapIcon,
   MapPin,
   Navigation,
+  Navigation2,
   Play,
+  RotateCcw,
   Radio,
   RefreshCw,
   Ship,
+  Siren,
   Square,
   Trash2,
   Undo2,
@@ -50,9 +55,11 @@ import {
   insertShipCommand,
   insertVesselTrackPoint,
   marineDbEnabled,
+  resetMarineDashboardDemoData,
   seedSeedDropRecords,
   subscribeShipCommandInserts,
   upsertSeedDropRecord,
+  type SeedDropInput,
   type VesselTrackPoint,
 } from "@/lib/marine-db";
 import { OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
@@ -76,15 +83,18 @@ import {
   WeatherAlertOverlay,
 } from "./components/EmergencyDemoOverlay";
 import { AiTicker } from "./components/AiTicker";
+import { AiWeatherJoltBanner } from "./components/AiWeatherJoltBanner";
+import { forceAiTickerSpeechUnmuteForCrew } from "@/lib/ai-ticker-speech-prefs";
 import { WeatherTimelineTracker } from "./components/WeatherTimelineTracker";
 import { WorkPlanAiModal } from "./components/WorkPlanAiModal";
 import { TodayTrackReportModal } from "./components/TodayTrackReportModal";
+import { TrackNavigationModal } from "./components/TrackNavigationModal";
 import { TrackRecordSidebarHint } from "./components/TrackRecordSidebarHint";
 import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
 import { analyzeWorkPlanBriefWithGroq, type WorkPlanGroqBrief } from "@/lib/groq-work-plan";
 import { isGroqConfigured } from "@/lib/groq-weather";
 import { loadWorkAiUserNote, saveWorkAiUserNote } from "@/lib/work-ai-user-note";
-import { estimateSeedingAreaHa, formatAreaHa, ymdLocal } from "@/lib/seeding-day-eval";
+import { estimateSeedingAreaHa, formatAreaHa, haversineKm, ymdLocal } from "@/lib/seeding-day-eval";
 import {
   dropAgeColors,
   dropTestAgeColors,
@@ -92,6 +102,22 @@ import {
   seedDropMarkerColors,
 } from "@/lib/seed-drop-visual";
 import { buildSampleLteForYmdRange, trackReportUsesTestSample } from "@/lib/track-report-test-sample";
+import { formatLatLngTrackLines } from "@/lib/track-navigation";
+import { evenlySpacedSeedPointsAlongRoute } from "@/lib/route-seed-plan";
+
+/** 브라우저 TTS — 길안내 멘트(사용자 제스처 직후에만 호출) */
+function speakNavKorean(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ko-KR";
+    u.rate = 1;
+    window.speechSynthesis.speak(u);
+  } catch {
+    /* ignore */
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -795,7 +821,10 @@ export default function Dashboard() {
     return { x: wp.x, y: wp.y, heading: 45, lat: coords.lat, lng: coords.lng, speed: 3.7 };
   });
   const [path, setPath] = useState<{ x: number; y: number }[]>([]);
-  const [zoom, setZoom] = useState(0);
+  /** Leaflet zoomIn/Out(1) — 예전 흰색 ±와 동일, 카운터만 증가 */
+  const [mapZoomInNonce, setMapZoomInNonce] = useState(0);
+  const [mapZoomOutNonce, setMapZoomOutNonce] = useState(0);
+  const [mapLiveZoom, setMapLiveZoom] = useState<number | null>(null);
   const [mapFitNonce, setMapFitNonce] = useState(1);
   const [clock, setClock] = useState(() => new Date());
   const [colorHelpOpen, setColorHelpOpen] = useState(false);
@@ -833,10 +862,25 @@ export default function Dashboard() {
   const [workAiGroq, setWorkAiGroq] = useState<WorkPlanGroqBrief | null>(null);
   const [workAiLoading, setWorkAiLoading] = useState(false);
   const [workAiUserNote, setWorkAiUserNote] = useState("");
+  const [workPlanScheduleResetKey, setWorkPlanScheduleResetKey] = useState(0);
+  const [fullResetBusy, setFullResetBusy] = useState(false);
 
   const [showVisionModal, setShowVisionModal] = useState(false);
   const [trackReportModalOpen, setTrackReportModalOpen] = useState(false);
   const [showTodayTrackReplayOnMap, setShowTodayTrackReplayOnMap] = useState(false);
+  /** 수동 입력(위·경도 줄) 항적 — 2점 이상이면 금일 자동 항적 대신 지도·항해에 사용 */
+  const [manualReplayPath, setManualReplayPath] = useState<[number, number][] | null>(null);
+  const [trackNavModalOpen, setTrackNavModalOpen] = useState(false);
+  const [trackNavGuideActive, setTrackNavGuideActive] = useState(false);
+  const [trackNavLegIndex, setTrackNavLegIndex] = useState(0);
+  const [trackNavArrivedFinal, setTrackNavArrivedFinal] = useState(false);
+  /** 안내 시작 직후 자동차 내비식 오프닝 카드(몇 초) */
+  const [trackNavIntroVisible, setTrackNavIntroVisible] = useState(false);
+  /** null | waypoints: 지도 클릭으로 항로 꼭짓점, seedPlan: 살포 예정점만 클릭 추가 */
+  const [routeMapEditorMode, setRouteMapEditorMode] = useState<null | "waypoints" | "seedPlan">(null);
+  /** 경로 따라 미리 찍은 살포 예정(계획) 좌표 — 실제 살포 기록과 별개 */
+  const [plannedSeedLatLng, setPlannedSeedLatLng] = useState<[number, number][]>([]);
+  const [plannedSeedEvenInput, setPlannedSeedEvenInput] = useState("20");
 
   const [fieldReportModalOpen, setFieldReportModalOpen] = useState(false);
   const [fieldReportActive, setFieldReportActive] = useState(false);
@@ -989,6 +1033,15 @@ export default function Dashboard() {
 
   const isRealWithGps = mapMode === "real" && gpsVessel != null;
   const awaitingGps = mapMode === "real" && gpsVessel == null;
+  /** 사이드바·수치: 실시간 모드면 시뮬 선박 좌표를 숨기고 GNSS만(대기 중은 플레이스홀더) */
+  const sidebarGnssStatusLabel =
+    mapMode === "test"
+      ? "내 위치 찾기 꺼짐 · 시뮬"
+      : gpsError
+        ? "GNSS 오류"
+        : gpsVessel
+          ? "GNSS 연동"
+          : "GNSS 수신 중";
 
   const leafletPathLatLng = useMemo(
     () => (mapMode === "real" ? [] : pathLatLng),
@@ -1106,15 +1159,118 @@ export default function Dashboard() {
     return [];
   }, [clockYmd, lteTrackPoints, drops, leafletVessel.lat, leafletVessel.lng]);
 
-  useEffect(() => {
-    setShowTodayTrackReplayOnMap(false);
-  }, [clockYmd]);
+  const displayReplayPath = useMemo((): [number, number][] => {
+    if (manualReplayPath != null) return manualReplayPath;
+    return todayReplayTrackPath;
+  }, [manualReplayPath, todayReplayTrackPath]);
+
+  const navDefaultPasteLines = useMemo(() => {
+    if (manualReplayPath != null && manualReplayPath.length > 0) {
+      return formatLatLngTrackLines(manualReplayPath);
+    }
+    return formatLatLngTrackLines(todayReplayTrackPath);
+  }, [manualReplayPath, todayReplayTrackPath]);
 
   useEffect(() => {
-    if (showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2) {
+    setShowTodayTrackReplayOnMap(false);
+    setManualReplayPath(null);
+    setTrackNavGuideActive(false);
+    setTrackNavLegIndex(0);
+    setTrackNavArrivedFinal(false);
+    setTrackNavIntroVisible(false);
+    setRouteMapEditorMode(null);
+    setPlannedSeedLatLng([]);
+  }, [clockYmd]);
+
+  const prevTrackNavGuideRef = useRef(false);
+  useEffect(() => {
+    const on = trackNavGuideActive;
+    const was = prevTrackNavGuideRef.current;
+    prevTrackNavGuideRef.current = on;
+    if (on && !was) {
+      setTrackNavIntroVisible(true);
+      speakNavKorean("경로 안내를 시작합니다. 다음 안내 지점까지 이어갑니다.");
+      const id = window.setTimeout(() => setTrackNavIntroVisible(false), 4_200);
+      return () => window.clearTimeout(id);
+    }
+    if (!on && was) {
+      setTrackNavIntroVisible(false);
+      speakNavKorean("안내를 종료합니다.");
+    }
+    return undefined;
+  }, [trackNavGuideActive]);
+
+  const prevTrackNavArrivedRef = useRef(false);
+  useEffect(() => {
+    if (!trackNavGuideActive) {
+      prevTrackNavArrivedRef.current = false;
+      return;
+    }
+    const arr = trackNavArrivedFinal;
+    const was = prevTrackNavArrivedRef.current;
+    prevTrackNavArrivedRef.current = arr;
+    if (arr && !was) {
+      speakNavKorean("목적지 부근입니다.");
+    }
+  }, [trackNavArrivedFinal, trackNavGuideActive]);
+
+  useEffect(() => {
+    if (
+      showTodayTrackReplayOnMap &&
+      displayReplayPath.length < 2 &&
+      routeMapEditorMode !== "waypoints" &&
+      routeMapEditorMode !== "seedPlan"
+    ) {
       setShowTodayTrackReplayOnMap(false);
     }
-  }, [showTodayTrackReplayOnMap, todayReplayTrackPath.length]);
+  }, [showTodayTrackReplayOnMap, displayReplayPath.length, routeMapEditorMode]);
+
+  useEffect(() => {
+    if (!trackNavGuideActive || displayReplayPath.length < 2) return;
+    const nextIdx = trackNavLegIndex + 1;
+    if (nextIdx >= displayReplayPath.length) return;
+    const [tlat, tlng] = displayReplayPath[nextIdx];
+    const dKm = haversineKm(leafletVessel.lat, leafletVessel.lng, tlat, tlng);
+    const isLastLeg = trackNavLegIndex >= displayReplayPath.length - 2;
+    const threshKm = isLastLeg ? 0.12 : 0.09;
+    if (dKm > threshKm) return;
+    if (isLastLeg) {
+      setTrackNavArrivedFinal(true);
+      return;
+    }
+    setTrackNavLegIndex((i) => Math.min(i + 1, displayReplayPath.length - 2));
+    setTrackNavArrivedFinal(false);
+  }, [
+    trackNavGuideActive,
+    trackNavLegIndex,
+    displayReplayPath,
+    leafletVessel.lat,
+    leafletVessel.lng,
+  ]);
+
+  const trackNavGuideStats = useMemo(() => {
+    if (!trackNavGuideActive || displayReplayPath.length < 2) return null;
+    const nextIdx = Math.min(trackNavLegIndex + 1, displayReplayPath.length - 1);
+    const [tlat, tlng] = displayReplayPath[nextIdx];
+    const dKm = haversineKm(leafletVessel.lat, leafletVessel.lng, tlat, tlng);
+    const bearing = Math.round(bearingDeg(leafletVessel.lat, leafletVessel.lng, tlat, tlng));
+    return { distKm: dKm, bearing, wptLabel: `WPT${nextIdx + 1}` };
+  }, [trackNavGuideActive, displayReplayPath, trackNavLegIndex, leafletVessel.lat, leafletVessel.lng]);
+
+  const replayNavGuideLine = useMemo(() => {
+    if (!trackNavGuideActive || displayReplayPath.length < 2) return null;
+    const nextIdx = Math.min(trackNavLegIndex + 1, displayReplayPath.length - 1);
+    const to = displayReplayPath[nextIdx];
+    return {
+      from: [leafletVessel.lat, leafletVessel.lng] as [number, number],
+      to,
+    };
+  }, [trackNavGuideActive, displayReplayPath, trackNavLegIndex, leafletVessel.lat, leafletVessel.lng]);
+
+  const replayTrackHighlightVertexIndex =
+    trackNavGuideActive && displayReplayPath.length > 1
+      ? Math.min(trackNavLegIndex + 1, displayReplayPath.length - 1)
+      : null;
 
   const leafletDrops = useMemo(
     () =>
@@ -1254,13 +1410,13 @@ export default function Dashboard() {
     };
   }, [marineDbEnabled(), lteFollowEnabled, vesselLteId, mapMode]);
 
-  /** 위치 보고·Realtime 수신 시 DB 궤적을 다시 읽어 지도·시뮬 선박에 반영 */
+  /** 위치 보고·Realtime 수신 시 DB 궤적 갱신. 시뮬 선박 좌표는「해상 기기(LTE) 궤적」켠 경우에만 DB에 맞춤(그렇지 않으면 시연 항적만 유지). */
   const refreshTrackFromDb = useCallback(async () => {
     if (!marineDbEnabled()) return;
     const pts = await fetchVesselTrackPoints(vesselLteId, 500);
     if (pts === null) return;
     if (lteFollowEnabled) setLteTrackPoints(pts);
-    if (mapMode === "test" && pts.length > 0) {
+    if (lteFollowEnabled && mapMode === "test" && pts.length > 0) {
       const last = pts[pts.length - 1];
       const prev = pts.length >= 2 ? pts[pts.length - 2] : null;
       let heading =
@@ -1696,6 +1852,241 @@ export default function Dashboard() {
     setMapFitNonce((n) => n + 1);
   }, []);
 
+  const handleApplyManualReplayPath = useCallback((pts: [number, number][]) => {
+    setManualReplayPath(pts);
+    setShowTodayTrackReplayOnMap(true);
+    setTrackNavLegIndex(0);
+    setTrackNavArrivedFinal(false);
+    setTrackNavGuideActive(false);
+    setPlannedSeedLatLng([]);
+    setMapFitNonce((n) => n + 1);
+  }, []);
+
+  const handleClearManualReplayPath = useCallback(() => {
+    setManualReplayPath(null);
+    setTrackNavLegIndex(0);
+    setTrackNavArrivedFinal(false);
+    setTrackNavGuideActive(false);
+    setRouteMapEditorMode(null);
+    setPlannedSeedLatLng([]);
+    setMapFitNonce((n) => n + 1);
+  }, []);
+
+  const handleRouteMapClickAddWaypoint = useCallback(
+    (la: number, ln: number) => {
+      setManualReplayPath((prev) => {
+        const base = prev ?? todayReplayTrackPath;
+        return [...base, [la, ln] as [number, number]];
+      });
+      setShowTodayTrackReplayOnMap(true);
+      setMapFitNonce((n) => n + 1);
+    },
+    [todayReplayTrackPath],
+  );
+
+  const handleRouteVertexDragEnd = useCallback(
+    (index: number, la: number, ln: number) => {
+      setManualReplayPath((prev) => {
+        const base = prev ?? todayReplayTrackPath;
+        if (index < 0 || index >= base.length) return prev;
+        const next = [...base];
+        next[index] = [la, ln];
+        return next;
+      });
+      setMapFitNonce((n) => n + 1);
+    },
+    [todayReplayTrackPath],
+  );
+
+  const handleRouteVertexRemove = useCallback(
+    (index: number) => {
+      setManualReplayPath((prev) => {
+        const base = prev ?? todayReplayTrackPath;
+        if (index < 0 || index >= base.length) return prev;
+        const next = base.filter((_, j) => j !== index);
+        if (next.length < 2) {
+          queueMicrotask(() => setTrackNavGuideActive(false));
+        }
+        return next.length === 0 ? null : next;
+      });
+      setMapFitNonce((n) => n + 1);
+    },
+    [todayReplayTrackPath],
+  );
+
+  const handleRouteVertexCoordsApply = useCallback(
+    (index: number, la: number, ln: number) => {
+      if (la < -90 || la > 90 || ln < -180 || ln > 180) {
+        window.alert("위도는 -90~90, 경도는 -180~180 범위로 입력하세요.");
+        return;
+      }
+      setManualReplayPath((prev) => {
+        const base = prev ?? todayReplayTrackPath;
+        if (index < 0 || index >= base.length) return prev;
+        const next = [...base];
+        next[index] = [la, ln];
+        return next;
+      });
+      setMapFitNonce((n) => n + 1);
+    },
+    [todayReplayTrackPath],
+  );
+
+  const handlePlannedSeedMapClick = useCallback((la: number, ln: number) => {
+    setPlannedSeedLatLng((p) => [...p, [la, ln]]);
+    setMapFitNonce((n) => n + 1);
+  }, []);
+
+  const handlePlannedSeedEvenDistribute = useCallback(() => {
+    const n = parseInt(plannedSeedEvenInput, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 500) {
+      window.alert("살포 예정 개수는 1~500 사이 숫자로 입력하세요.");
+      return;
+    }
+    if (displayReplayPath.length < 2) {
+      window.alert("먼저 항로를 2점 이상으로 만든 뒤 사용하세요. (지도에서 경로 찍기·줄 입력·금일 항로)");
+      return;
+    }
+    setPlannedSeedLatLng(evenlySpacedSeedPointsAlongRoute(displayReplayPath, n));
+    setMapFitNonce((x) => x + 1);
+  }, [plannedSeedEvenInput, displayReplayPath]);
+
+  const handlePlannedSeedsClear = useCallback(() => {
+    setPlannedSeedLatLng([]);
+    setMapFitNonce((n) => n + 1);
+  }, []);
+
+  const handleRouteMapEditorModeChange = useCallback((m: null | "waypoints" | "seedPlan") => {
+    setRouteMapEditorMode(m);
+    if (m != null) setShowTodayTrackReplayOnMap(true);
+  }, []);
+
+  const handleToggleTrackNavGuide = useCallback(() => {
+    setTrackNavGuideActive((prev) => {
+      if (prev) return false;
+      setTrackNavLegIndex(0);
+      setTrackNavArrivedFinal(false);
+      setShowTodayTrackReplayOnMap(true);
+      setTrackNavModalOpen(false);
+      setRouteMapEditorMode(null);
+      return true;
+    });
+  }, []);
+
+  const handleResetTrackNavOrigin = useCallback(() => {
+    setTrackNavLegIndex(0);
+    setTrackNavArrivedFinal(false);
+  }, []);
+
+  const handleFullReset = useCallback(async () => {
+    if (
+      !window.confirm(
+        "살포 이력·날짜 필터·선박 신호·살포 진행 상태·지도 뷰를 초기화하고,\n작업 예약·일정을 기본 시연 데이터로 되돌립니다.\n(Supabase 연동 시 서버의 살포 기록·예약·선박 궤적·신호 로그도 함께 리셋됩니다.)\n\n계속할까요?",
+      )
+    ) {
+      return;
+    }
+    setFullResetBusy(true);
+    try {
+      const fresh = seedInitial();
+      const seedInputs: SeedDropInput[] = fresh.map((d) => ({
+        id: d.id,
+        label: d.label,
+        time: d.time,
+        lat: d.lat,
+        lng: d.lng,
+        status: d.status,
+        recordedAt: d.recordedAt,
+        verificationMismatch: d.verificationMismatch,
+      }));
+
+      if (marineDbEnabled()) {
+        const ok = await resetMarineDashboardDemoData({
+          vesselId: vesselLteIdFromEnv(),
+          seedDrops: seedInputs,
+        });
+        if (!ok) {
+          window.alert(
+            "서버 데이터 초기화에 실패했습니다. Supabase 권한·RLS·네트워크를 확인한 뒤 다시 시도하세요.",
+          );
+          return;
+        }
+      } else {
+        try {
+          localStorage.removeItem(DROP_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const maxNum = fresh.reduce((m, d) => Math.max(m, parseInt(String(d.id), 10) || 0), 0);
+      counter.current = Math.max(maxNum + 1, 1006);
+      zoneCounts.current = rebuildZoneCountsFromDrops(fresh);
+      wpIdx.current = 0;
+      gpsTestDropSeqRef.current = 0;
+      hadGpsFixForFitRef.current = false;
+
+      const wp = WAYPOINTS[0];
+      const coords = xyToLatLng(wp.x, wp.y);
+      setPath([]);
+      setVessel({
+        x: wp.x,
+        y: wp.y,
+        heading: 45,
+        lat: coords.lat,
+        lng: coords.lng,
+        speed: 3.7,
+      });
+      setDrops(fresh);
+      setFilterStart("");
+      setFilterEnd("");
+      setSignals([]);
+      setSignalSending(false);
+      setSeedingActive(false);
+      setMapMode("test");
+      setMapZoomInNonce(0);
+      setMapZoomOutNonce(0);
+      setLteFollowEnabled(false);
+      setLteTrackPoints([]);
+      setAiEmergencyMsg(undefined);
+      setSafetyLevel("안전");
+      setForecastScores([]);
+      setGroqSummary("");
+      setWorkAiUserNote("");
+      saveWorkAiUserNote("");
+      setFieldReportActive(false);
+      setFieldReportModalOpen(false);
+      setFieldReportExtras({ ptyCode: 0, pop: 0, sky: 1 });
+      fieldReportActiveRef.current = false;
+      fieldReportExtrasRef.current = { ptyCode: 0, pop: 0, sky: 1 };
+      setWeatherPanelNonce((n) => n + 1);
+      setDemoWeatherMode("normal");
+      setDemoAlertVisible(false);
+      setDemoSafeVisible(false);
+      setDemoSosVisible(false);
+      setDemoSosBlink(false);
+      setShowTodayTrackReplayOnMap(false);
+      setManualReplayPath(null);
+      setTrackNavModalOpen(false);
+      setTrackNavGuideActive(false);
+      setTrackNavLegIndex(0);
+      setTrackNavArrivedFinal(false);
+      setTrackNavIntroVisible(false);
+      setRouteMapEditorMode(null);
+      setPlannedSeedLatLng([]);
+      setPositionReportToast(null);
+      setReturnCommandModalOpen(false);
+      setWeather(initWeather());
+      setMapFitNonce((n) => n + 1);
+      setWorkPlanScheduleResetKey((k) => k + 1);
+      if (marineDbEnabled()) {
+        dropsDbReady.current = true;
+      }
+    } finally {
+      setFullResetBusy(false);
+    }
+  }, []);
+
   const applyDropMonthFilter = useCallback((year: number, month: number) => {
     const start = `${year}-${String(month).padStart(2, "0")}-01`;
     const end = lastDayOfMonthYmd(year, month);
@@ -1709,11 +2100,20 @@ export default function Dashboard() {
     setFilterEnd(ymd);
   }, []);
 
-  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 1, 4)), []);
-  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 1, 0)), []);
+  const handleMapZoomLevel = useCallback((z: number) => {
+    setMapLiveZoom(z);
+  }, []);
+
+  const resetMapZoomNonces = useCallback(() => {
+    setMapZoomInNonce(0);
+    setMapZoomOutNonce(0);
+  }, []);
+
+  const handleZoomIn = useCallback(() => setMapZoomInNonce((n) => n + 1), []);
+  const handleZoomOut = useCallback(() => setMapZoomOutNonce((n) => n + 1), []);
   /** 내 위치 모드: GPS로 다시 잡고 지도 맞춤 / 테스트: 살포·항적 기준 맞춤 */
   const handleRecenter = useCallback(() => {
-    setZoom(0);
+    resetMapZoomNonces();
     if (mapMode === "real" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -1731,7 +2131,7 @@ export default function Dashboard() {
       return;
     }
     setMapFitNonce((n) => n + 1);
-  }, [mapMode, applyGeolocationCoords]);
+  }, [mapMode, applyGeolocationCoords, resetMapZoomNonces]);
 
   /** GNSS 모드: 모바일「센서 시뮬 1건」과 동일 — 살포 시작 후에만, 현재 GPS에 1건 기록 */
   const handleGpsSensorSimDrop = useCallback(() => {
@@ -1776,16 +2176,16 @@ export default function Dashboard() {
   useEffect(() => {
     const el = mapContainerRef.current;
     if (!el) return;
-    const threshold = 72;
+    const threshold = 40;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
       wheelZoomAccum.current += e.deltaY;
       if (wheelZoomAccum.current >= threshold) {
-        setZoom((z) => Math.max(0, z - 1));
+        setMapZoomOutNonce((n) => n + 1);
         wheelZoomAccum.current = 0;
       } else if (wheelZoomAccum.current <= -threshold) {
-        setZoom((z) => Math.min(4, z + 1));
+        setMapZoomInNonce((n) => n + 1);
         wheelZoomAccum.current = 0;
       }
     };
@@ -1909,6 +2309,30 @@ export default function Dashboard() {
         lteTrackPoints={lteTrackPoints}
         vesselName={VESSEL_NAME}
       />
+      <TrackNavigationModal
+        open={trackNavModalOpen}
+        onClose={() => {
+          setRouteMapEditorMode(null);
+          setTrackNavModalOpen(false);
+        }}
+        defaultLines={navDefaultPasteLines}
+        pathPointCount={displayReplayPath.length}
+        hasManualTrack={manualReplayPath != null && manualReplayPath.length >= 2}
+        onApplyManualPath={handleApplyManualReplayPath}
+        onClearManualPath={handleClearManualReplayPath}
+        navActive={trackNavGuideActive}
+        onToggleNav={handleToggleTrackNavGuide}
+        onResetOrigin={handleResetTrackNavOrigin}
+        navStats={trackNavGuideStats}
+        arrivedFinal={trackNavArrivedFinal}
+        routeMapEditorMode={routeMapEditorMode}
+        onRouteMapEditorMode={handleRouteMapEditorModeChange}
+        plannedSeedEvenCountStr={plannedSeedEvenInput}
+        onPlannedSeedEvenCountStrChange={setPlannedSeedEvenInput}
+        onPlannedSeedEvenDistribute={handlePlannedSeedEvenDistribute}
+        onPlannedSeedsClear={handlePlannedSeedsClear}
+        plannedSeedPointCount={plannedSeedLatLng.length}
+      />
       <FieldWeatherReportModal
         open={fieldReportModalOpen}
         onClose={() => setFieldReportModalOpen(false)}
@@ -1995,7 +2419,13 @@ export default function Dashboard() {
               <p className="text-sm font-semibold leading-snug tracking-tight text-slate-100 sm:text-base">
                 해양 종자 살포 관제
               </p>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-400 sm:text-xs">제3해양살포함 · GNSS 살포 기록</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400 sm:text-xs">
+                {mapMode === "real"
+                  ? gpsVessel
+                    ? "제3해양살포함 · 실위치(GNSS)"
+                    : "제3해양살포함 · GNSS 수신 대기"
+                  : "제3해양살포함 · 시뮬 항적"}
+              </p>
             </div>
           </div>
           <div className="mt-2.5 flex gap-0.5 rounded-lg bg-black/20 p-0.5">
@@ -2044,7 +2474,12 @@ export default function Dashboard() {
               {
                 icon: <Ship className="w-3.5 h-3.5 text-amber-300/70" />,
                 label: "속도(노트)",
-                val: mapMode === "real" && gpsVessel && gpsSpeedKn != null ? gpsSpeedKn.toFixed(1) : vessel.speed.toFixed(1),
+                val:
+                  mapMode === "real" && gpsVessel && gpsSpeedKn != null
+                    ? gpsSpeedKn.toFixed(1)
+                    : mapMode === "real"
+                      ? "—"
+                      : vessel.speed.toFixed(1),
                 unit: "kt",
                 color: "text-amber-100/85",
               },
@@ -2124,10 +2559,13 @@ export default function Dashboard() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setWorkAiModalOpen(true)}
-                      title="누르면 금일 작업·안착(해저)·과제형 50% 참고·현장 행동 권고를 봅니다"
+                      onClick={() => {
+                        forceAiTickerSpeechUnmuteForCrew();
+                        setWorkAiModalOpen(true);
+                      }}
+                      title="누르면 금일 작업·안착(해저)·과제형 50% 참고·현장 행동 권고를 봅니다. AI 안내 음성은 읽어주기 모드로 맞춥니다(전체 항해 인원)."
                       className="work-ai-hint-btn group flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-cyan-400/55 bg-gradient-to-br from-cyan-950/95 via-teal-950/90 to-slate-900/95 text-[9px] font-black leading-none tracking-tight text-cyan-50 shadow-sm transition-all hover:border-cyan-300/70 hover:from-cyan-900/95 hover:via-teal-900/92 active:scale-95"
-                      aria-label="AI 금일 작업 보조 요약 열기"
+                      aria-label="AI 금일 작업 보조 요약 열기. 상단 AI 음성은 읽어주기 모드로 맞춤"
                     >
                       <Sparkles className="mb-0.5 h-2.5 w-2.5 text-cyan-200/95 group-hover:text-cyan-100" aria-hidden />
                       AI
@@ -2197,8 +2635,18 @@ export default function Dashboard() {
               <Crosshair className="w-3.5 h-3.5 text-teal-400/55 shrink-0" aria-hidden />
               선박 위치
             </span>
-            <span className={`text-[9px] font-medium shrink-0 ${isRealWithGps ? "text-emerald-400/80" : "text-slate-500"}`}>
-              {isRealWithGps ? "GNSS 연동" : "내 위치 찾기 꺼짐 · 시뮬"}
+            <span
+              className={`text-[9px] font-medium shrink-0 ${
+                mapMode === "test"
+                  ? "text-slate-500"
+                  : gpsError
+                    ? "text-amber-400/90"
+                    : gpsVessel
+                      ? "text-emerald-400/80"
+                      : "text-cyan-300/85"
+              }`}
+            >
+              {sidebarGnssStatusLabel}
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
@@ -2206,17 +2654,32 @@ export default function Dashboard() {
               [
                 {
                   lab: "북위",
-                  val: `${(isRealWithGps && gpsVessel ? gpsVessel.lat : vessel.lat).toFixed(4)}°`,
+                  val:
+                    mapMode === "real" && gpsVessel
+                      ? `${gpsVessel.lat.toFixed(4)}°`
+                      : mapMode === "real"
+                        ? "—"
+                        : `${vessel.lat.toFixed(4)}°`,
                   icon: <ArrowUp className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
                 {
                   lab: "동경",
-                  val: `${(isRealWithGps && gpsVessel ? gpsVessel.lng : vessel.lng).toFixed(4)}°`,
+                  val:
+                    mapMode === "real" && gpsVessel
+                      ? `${gpsVessel.lng.toFixed(4)}°`
+                      : mapMode === "real"
+                        ? "—"
+                        : `${vessel.lng.toFixed(4)}°`,
                   icon: <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
                 {
                   lab: "방위",
-                  val: `${Math.round(leafletVessel.heading)}°`,
+                  val:
+                    mapMode === "real" && gpsVessel
+                      ? `${Math.round(gpsVessel.heading)}°`
+                      : mapMode === "real"
+                        ? "—"
+                        : `${Math.round(leafletVessel.heading)}°`,
                   icon: <Compass className="w-3 h-3 text-slate-500 shrink-0" aria-hidden />,
                 },
               ] as const
@@ -2245,38 +2708,44 @@ export default function Dashboard() {
         >
           <div className="flex items-center gap-2">
             <span className="inline-flex min-w-0 max-w-[38%] shrink-0 items-center gap-1.5 text-[11px] font-medium text-slate-300 sm:max-w-[44%]">
-              <Waypoints className="h-3.5 w-3.5 shrink-0 text-teal-400/60" aria-hidden />
-              <span className="truncate">항적 기록</span>
+              <Navigation2 className="h-3.5 w-3.5 shrink-0 text-teal-400/60" aria-hidden />
+              <span className="truncate">항로 길안내</span>
             </span>
             <TrackRecordSidebarHint />
             <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
-              title="항적 기록 — 출발·경로·복귀·살포·기상·평가·CSV (테스트 시 샘플)"
-              aria-label="항적 기록 열기"
-              onClick={() => setTrackReportModalOpen(true)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-teal-100/90 transition-colors hover:border-teal-400/45 hover:bg-teal-500/12 hover:text-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/25"
+              title="항로 길안내 — 위·경도로 경로 입력, 항해 시 다음 지점까지 거리·침로 표시"
+              aria-label="항로 길안내 열기"
+              onClick={() => setTrackNavModalOpen(true)}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-amber-100/90 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/35 ${
+                trackNavGuideActive ? "ring-2 ring-amber-400/55 border-amber-400/45 bg-amber-950/30" : ""
+              }`}
               style={{
                 background: SIDEBAR_CARD_BG,
-                borderColor: "rgba(64,224,208,0.22)",
+                borderColor: "rgba(251,191,36,0.35)",
               }}
             >
-              <Waypoints className="h-4 w-4" strokeWidth={2} aria-hidden />
+              <Navigation2 className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
             <button
               type="button"
               title={
-                todayReplayTrackPath.length < 2
-                  ? "오늘 표시할 항적 좌표가 부족합니다(2점 이상 필요)"
+                displayReplayPath.length < 2
+                  ? "오늘 표시할 항로 좌표가 부족합니다(2점 이상 필요)"
                   : showTodayTrackReplayOnMap
-                    ? "금일 항적 시뮬레이션 끄기"
-                    : "금일 항적 기록을 지도에 표시(시뮬)"
+                    ? "지도 위 금일 항로 표시 끄기"
+                    : "금일 항로를 지도에 표시(꼭짓점·선) — 길안내 기준 경로"
               }
-              aria-label="금일 항적 지도 표시 토글"
-              disabled={!showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2}
+              aria-label="금일 항로 지도 표시 토글"
+              disabled={!showTodayTrackReplayOnMap && displayReplayPath.length < 2}
               onClick={() => {
-                if (!showTodayTrackReplayOnMap && todayReplayTrackPath.length < 2) return;
-                setShowTodayTrackReplayOnMap((v) => !v);
+                if (!showTodayTrackReplayOnMap && displayReplayPath.length < 2) return;
+                setShowTodayTrackReplayOnMap((v) => {
+                  const on = !v;
+                  if (!on) setTrackNavGuideActive(false);
+                  return on;
+                });
                 setMapFitNonce((n) => n + 1);
               }}
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-fuchsia-100/90 transition-colors hover:border-fuchsia-400/50 hover:bg-fuchsia-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/30 disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -2288,6 +2757,19 @@ export default function Dashboard() {
               }}
             >
               <Route className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+            <button
+              type="button"
+              title="운항·길안내 참고 보고 — 출발·경로·복귀·살포·기상·평가·CSV (테스트 시 샘플)"
+              aria-label="운항·길안내 참고 보고 열기"
+              onClick={() => setTrackReportModalOpen(true)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-teal-100/90 transition-colors hover:border-teal-400/45 hover:bg-teal-500/12 hover:text-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/25"
+              style={{
+                background: SIDEBAR_CARD_BG,
+                borderColor: "rgba(64,224,208,0.22)",
+              }}
+            >
+              <Waypoints className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
           </div>
           </div>
@@ -2335,6 +2817,7 @@ export default function Dashboard() {
                 },
               ] as const
             ).map((b) => {
+              const posReportDisabled = mapMode === "real" && !gpsVessel;
               const signalMuted: Record<
                 (typeof b)["cmd"],
                 { fill: string; border: string; ink: string }
@@ -2372,9 +2855,16 @@ export default function Dashboard() {
               <button
                 key={b.cmd}
                 type="button"
-                title={b.tip}
+                title={
+                  b.cmd === "report_position" && posReportDisabled
+                    ? "GNSS 좌표를 받은 뒤 사용할 수 있습니다."
+                    : b.tip
+                }
                 onClick={() => handleSignal(b.cmd)}
-                disabled={signalSending && b.cmd !== "seed_start" && b.cmd !== "seed_stop"}
+                disabled={
+                  (signalSending && b.cmd !== "seed_start" && b.cmd !== "seed_stop") ||
+                  (b.cmd === "report_position" && posReportDisabled)
+                }
                 className={`flex min-h-[2.5rem] items-center justify-center gap-1 rounded-md border border-solid px-1.5 py-1.5 transition-[filter,transform] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/15 active:scale-[0.98] disabled:opacity-40 ${
                   b.cmd === "seed_start" && seedingActive ? "seeding-start-btn-active ring-2 ring-emerald-500/35" : ""
                 }`}
@@ -2651,6 +3141,20 @@ export default function Dashboard() {
                   <span className="text-[9px] font-bold leading-none">CSV</span>
                 </button>
               </div>
+              <button
+                type="button"
+                disabled={fullResetBusy}
+                onClick={() => void handleFullReset()}
+                title="살포 이력·필터·선박 신호·살포 진행·지도 모드를 초기화하고 작업 예약을 기본 일정으로 되돌립니다"
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[11px] font-bold text-amber-100/95 transition-[background,opacity] hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-45"
+                style={{
+                  background: "rgba(251,191,36,0.12)",
+                  border: "1px solid rgba(251,191,36,0.35)",
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                전체 초기화
+              </button>
               {(filterStart || filterEnd) && (
                 <p className="text-center text-[10px] text-teal-200/50">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
               )}
@@ -2719,16 +3223,23 @@ export default function Dashboard() {
           )}
         </header>
 
-        <AiTicker
-          vesselName={VESSEL_NAME}
-          safetyLevel={displaySafetyLevel}
-          groqSummary={groqSummary}
-          aiMsg={aiEmergencyMsg ?? ""}
-          windSpeed={weather.windSpeed}
-          waveHeight={weather.waveHeight}
-          temp={weather.temp}
-          attachmentCue={workLocalRec.attachmentTickerCue}
-        />
+        <div className="flex min-h-0 w-full shrink-0 flex-col">
+          <AiWeatherJoltBanner
+            windSpeedMps={weather.windSpeed}
+            waveHeightM={weather.waveHeight}
+            safetyLevel={displaySafetyLevel}
+          />
+          <AiTicker
+            vesselName={VESSEL_NAME}
+            safetyLevel={displaySafetyLevel}
+            groqSummary={groqSummary}
+            aiMsg={aiEmergencyMsg ?? ""}
+            windSpeed={weather.windSpeed}
+            waveHeight={weather.waveHeight}
+            temp={weather.temp}
+            attachmentCue={workLocalRec.attachmentTickerCue}
+          />
+        </div>
 
         {/* Map container / Work plan view */}
         {viewMode === "schedule" ? (
@@ -2737,14 +3248,16 @@ export default function Dashboard() {
               className="w-[min(100%,20rem)] sm:w-[22rem] shrink-0 flex flex-col min-h-0 overflow-hidden border-r border-teal-500/20"
               style={{ background: "linear-gradient(180deg, #0a1f38 0%, #071428 100%)" }}
             >
-              <WorkPlanView weather={weather} variant="compact" />
+              <WorkPlanView weather={weather} variant="compact" scheduleResetKey={workPlanScheduleResetKey} />
             </div>
             <div className="relative flex-1 min-h-0 min-w-0">
               <div className="absolute inset-0 z-0 min-h-0 min-w-0">
                 <MarineLeafletMap
                   basemap="voyager"
                   center={[BASE_LAT, BASE_LNG]}
-                  zoomRail={1}
+                  postFitZoomLevels={1}
+                  mapZoomInNonce={0}
+                  mapZoomOutNonce={0}
                   fitNonce={mapFitNonce}
                   drops={[]}
                   vessel={leafletVessel}
@@ -2794,23 +3307,122 @@ export default function Dashboard() {
             <MarineLeafletMap
               basemap="voyager"
               center={[BASE_LAT, BASE_LNG]}
-              zoomRail={zoom}
+              mapZoomInNonce={mapZoomInNonce}
+              mapZoomOutNonce={mapZoomOutNonce}
+              postFitZoomLevels={0}
+              onMapZoomLevel={handleMapZoomLevel}
               fitNonce={mapFitNonce}
               drops={leafletDrops}
               vessel={leafletVessel}
               pathLatLng={leafletPathLatLng}
               ltePathLatLng={lteFollowEnabled ? ltePathLatLng : []}
-              replayTrackPathLatLng={showTodayTrackReplayOnMap ? todayReplayTrackPath : []}
+              replayTrackPathLatLng={showTodayTrackReplayOnMap ? displayReplayPath : []}
+              replayTrackShowVertexMarkers={
+                showTodayTrackReplayOnMap &&
+                displayReplayPath.length > 1 &&
+                routeMapEditorMode !== "waypoints"
+              }
+              replayTrackHighlightVertexIndex={replayTrackHighlightVertexIndex}
+              replayNavGuideLine={replayNavGuideLine}
+              replayTrackVertexEditor={
+                routeMapEditorMode === "waypoints"
+                  ? {
+                      vertices: displayReplayPath,
+                      onMapClick: handleRouteMapClickAddWaypoint,
+                      onVertexDragEnd: handleRouteVertexDragEnd,
+                      onVertexRemove: handleRouteVertexRemove,
+                      onVertexCoordsApply: handleRouteVertexCoordsApply,
+                    }
+                  : null
+              }
+              seedPlanMapEditor={
+                routeMapEditorMode === "seedPlan"
+                  ? { onMapClick: handlePlannedSeedMapClick }
+                  : null
+              }
+              plannedSeedMarkers={plannedSeedLatLng}
               vesselMarkerVariant={isRealWithGps ? "gpsDot" : "ship"}
               vesselSeedingActive={seedingActive}
               panMapToVesselOnMove={isRealWithGps || (lteFollowEnabled && lteRemoteFresh && mapMode === "test")}
-              fitToVesselOnly={isRealWithGps}
+              fitToVesselOnly={isRealWithGps || mapMode === "test"}
               hideVesselMarker={awaitingGps}
               maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
               disableScrollWheelZoom
               offlineNoTiles={OFFLINE_MAP_NO_TILES}
             />
           </div>
+
+          {trackNavGuideActive && trackNavGuideStats ? (
+            <div
+              className="pointer-events-none absolute bottom-80 left-4 z-20 max-w-[min(94vw,20.5rem)] overflow-hidden rounded-2xl border border-amber-400/45 shadow-2xl backdrop-blur-md"
+              role="status"
+              aria-live="polite"
+              style={{
+                background: "linear-gradient(165deg, rgba(12,39,72,0.97) 0%, rgba(4,24,46,0.98) 55%, rgba(2,12,24,0.99) 100%)",
+                boxShadow: "0 18px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
+              }}
+            >
+              <div className="flex items-stretch gap-0">
+                <div
+                  className="flex w-[3.25rem] shrink-0 flex-col items-center justify-center border-r border-amber-400/25 bg-amber-500/10 py-3"
+                  aria-hidden
+                >
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-amber-300/40 bg-amber-950/50"
+                    style={{
+                      transform: trackNavIntroVisible
+                        ? undefined
+                        : `rotate(${trackNavGuideStats.bearing}deg)`,
+                    }}
+                  >
+                    <Navigation
+                      className={`h-6 w-6 text-amber-200 ${trackNavIntroVisible ? "animate-pulse" : ""}`}
+                      strokeWidth={2.25}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 px-3 py-2.5">
+                  {trackNavIntroVisible ? (
+                    <>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/75">내비</p>
+                      <p className="mt-0.5 text-base font-black leading-snug tracking-tight text-white">
+                        경로 안내를 시작합니다
+                      </p>
+                      <p className="mt-1 text-[11px] leading-snug text-cyan-100/70">
+                        다음 안내 지점까지 거리·방향을 표시합니다. 실제 조종은 해도·기관 지시와 병행하세요.
+                      </p>
+                    </>
+                  ) : trackNavArrivedFinal ? (
+                    <>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300/80">도착</p>
+                      <p className="mt-0.5 text-lg font-black text-emerald-200">목적지 부근입니다</p>
+                      <p className="mt-1 text-[11px] text-cyan-100/65">안내를 종료하거나, 경로를 다시 확인하세요.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/75">
+                        다음 경유지까지
+                      </p>
+                      <p className="mt-1 font-mono text-[1.65rem] font-black tabular-nums leading-none tracking-tight text-white">
+                        {trackNavGuideStats.distKm < 1
+                          ? `${Math.max(0, Math.round(trackNavGuideStats.distKm * 1000))} m`
+                          : `${trackNavGuideStats.distKm.toFixed(2)} km`}
+                      </p>
+                      <p className="mt-1.5 text-[11px] text-cyan-100/80">
+                        <span className="font-semibold text-teal-200/90">{trackNavGuideStats.wptLabel}</span>
+                        <span className="text-white/35"> · </span>
+                        진북 기준 약{" "}
+                        <span className="font-mono font-bold text-amber-100/95">
+                          {String(trackNavGuideStats.bearing).padStart(3, "0")}°
+                        </span>
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* ── AI 기상 예측 타임라인 트래커 (지도 하단 오버레이) ── */}
           {forecastScores.length > 0 && (
@@ -2864,24 +3476,30 @@ export default function Dashboard() {
           <div className="absolute right-3 top-3 z-20 flex gap-0.5 items-center"
             style={{ background: "rgba(0,0,0,0.5)", borderRadius: 10, padding: "3px 5px", backdropFilter: "blur(8px)" }}>
             {[
-              { icon: "✅", fn: handleDemoNormal, tip: "Phase 1: 기상 정상" },
-              { icon: "⚡", fn: handleDemoDanger, tip: "Phase 2: 기상 악화" },
-              { icon: "🔴", fn: handleDemoSos,    tip: "Phase 4: SOS 수신" },
+              { Icon: CheckCircle2, fn: handleDemoNormal, tip: "Phase 1: 기상 정상", iconClass: "text-emerald-300/95" },
+              { Icon: CloudLightning, fn: handleDemoDanger, tip: "Phase 2: 기상 악화", iconClass: "text-amber-200/95" },
+              { Icon: Siren, fn: handleDemoSos, tip: "Phase 4: SOS 수신", iconClass: "text-rose-300/95" },
             ].map((b) => (
-              <button key={b.tip} onClick={b.fn} title={b.tip}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
-                style={{ lineHeight: 1, fontSize: 14 }}>
-                {b.icon}
+              <button key={b.tip} type="button" onClick={b.fn} title={b.tip}
+                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
+                style={{ lineHeight: 1 }}>
+                <b.Icon className={`h-3.5 w-3.5 ${b.iconClass}`} strokeWidth={2.25} aria-hidden />
               </button>
             ))}
-            <div className="w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,0.15)" }} />
+            <div className="mx-0.5 h-4 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
             {/* 고도화 모달 버튼 */}
             <button
+              type="button"
               onClick={() => setShowVisionModal(true)}
               title="해양 무인화 고도화 계획 (관공서 제안서용)"
-              className="flex items-center gap-1 px-2 h-6 rounded text-[10px] font-black transition-all hover:brightness-125"
-              style={{ background: "rgba(99,102,241,0.35)", border: "1px solid rgba(99,102,241,0.6)", color: "#c7d2fe" }}>
-              🏛️ <span style={{ letterSpacing: "0.02em" }}>고도화</span>
+              className="flex h-6 items-center gap-1 rounded px-2 text-[10px] font-black transition-all hover:brightness-110"
+              style={{
+                background: "rgba(45,212,191,0.16)",
+                border: "1px solid rgba(64,224,208,0.42)",
+                color: "#a5f3fc",
+              }}>
+              <Landmark className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+              <span style={{ letterSpacing: "0.02em" }}>고도화</span>
             </button>
           </div>
 
@@ -2906,7 +3524,7 @@ export default function Dashboard() {
             </FloatBtn>
             <FloatBtn
               onClick={() => {
-                setZoom(0);
+                resetMapZoomNonces();
                 setMapFitNonce((n) => n + 1);
               }}
               title="뷰 초기화"
@@ -2916,43 +3534,103 @@ export default function Dashboard() {
           </div>
 
           {/* Zoom badge */}
-          {zoom !== 0 && (
+          {mapLiveZoom != null && (
             <div className="absolute right-16 top-1/2 -translate-y-1/2 z-10">
               <div className="bg-black/55 text-cyan-300 text-xs font-mono px-2.5 py-1 rounded-full border border-white/10">
-                +{zoom}단
+                줌 {Math.round(mapLiveZoom)}
               </div>
             </div>
           )}
 
-          {/* 지도: 내 위치 찾기 토글 — 꺼짐: 선박·살포 / 켜짐: GPS */}
+          {/* 지도: 테스트/실제 모드 세그먼트 스위치 + 내 위치 찾기(GNSS 갱신) */}
           <div className="absolute bottom-6 right-4 z-30 flex flex-col items-end gap-1">
+            <div
+              role="group"
+              aria-label="지도 위치 모드"
+              className="flex w-full max-w-[14.5rem] min-h-[44px] rounded-lg border border-white/20 bg-[#041c2e]/85 p-1 shadow-lg backdrop-blur-sm"
+            >
+              <button
+                type="button"
+                aria-pressed={mapMode === "test"}
+                title="시뮬(테스트) — 시연 항로·남해 구역·가상 선박"
+                onClick={() => {
+                  if (mapMode === "test") return;
+                  const wp = WAYPOINTS[0];
+                  const coords = xyToLatLng(wp.x, wp.y);
+                  wpIdx.current = 0;
+                  setPath([]);
+                  setVessel({
+                    x: wp.x,
+                    y: wp.y,
+                    heading: 45,
+                    lat: coords.lat,
+                    lng: coords.lng,
+                    speed: 3.7,
+                  });
+                  setMapMode("test");
+                  resetMapZoomNonces();
+                  setMapFitNonce((n) => n + 1);
+                }}
+                className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-bold tracking-tight transition-colors ${
+                  mapMode === "test"
+                    ? "bg-slate-600/95 text-teal-100 shadow-inner ring-1 ring-white/10"
+                    : "text-white/45 hover:bg-white/[0.06] hover:text-white/75"
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                테스트
+              </button>
+              <button
+                type="button"
+                aria-pressed={mapMode === "real"}
+                title="실제 GNSS — 브라우저 위치 수신(권한·HTTPS 필요)"
+                onClick={() => {
+                  if (mapMode === "real") return;
+                  setMapMode("real");
+                }}
+                className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-bold tracking-tight transition-colors ${
+                  mapMode === "real"
+                    ? "bg-cyan-600 text-white shadow-inner ring-1 ring-cyan-300/35"
+                    : "text-white/45 hover:bg-white/[0.06] hover:text-white/75"
+                }`}
+              >
+                <Crosshair className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                실제
+              </button>
+            </div>
             <button
               type="button"
-              role="switch"
-              aria-checked={mapMode === "real"}
+              disabled={mapMode !== "real" || typeof navigator === "undefined" || !navigator.geolocation}
               title={
-                mapMode === "real"
-                  ? "끄면 선박 위치·항적으로 돌아갑니다"
-                  : "켜면 브라우저로 현재 위치를 찾아 표시합니다"
+                mapMode !== "real"
+                  ? "실제 GNSS 모드로 전환한 뒤 사용합니다"
+                  : "현재 위치를 다시 받아 지도에 맞춥니다"
               }
               onClick={() => {
-                if (mapMode === "real") {
-                  setMapMode("test");
-                  setZoom(0);
-                  setMapFitNonce((n) => n + 1);
-                  return;
-                }
-                setMapMode("real");
+                if (mapMode !== "real" || !navigator.geolocation) return;
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    if (mapModeRef.current !== "real") return;
+                    applyGeolocationCoords(pos.coords);
+                    setMapFitNonce((n) => n + 1);
+                  },
+                  (err) => {
+                    if (mapModeRef.current !== "real") return;
+                    setGpsError(geolocationErrorMessage(err));
+                    setMapFitNonce((n) => n + 1);
+                  },
+                  { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
+                );
               }}
-              className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold tracking-tight shadow-lg backdrop-blur-sm transition-colors ${
+              className={`flex min-h-[44px] w-full max-w-[14.5rem] items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold tracking-tight shadow-lg backdrop-blur-sm transition-colors ${
                 mapMode === "real"
-                  ? "border-orange-400/80 bg-orange-500 text-[#041c2e]"
-                  : "border-white/25 bg-[#041c2e]/90 text-white/90 hover:bg-white/10"
+                  ? "border-orange-400/80 bg-orange-500 text-[#041c2e] hover:brightness-105"
+                  : "cursor-not-allowed border-white/15 bg-black/35 text-white/35"
               }`}
             >
               <Crosshair
                 className={`h-[18px] w-[18px] shrink-0 stroke-[2.25] ${
-                  mapMode === "real" ? "text-[#041c2e]" : "text-white/85"
+                  mapMode === "real" ? "text-[#041c2e]" : "text-white/30"
                 }`}
                 aria-hidden
               />
@@ -3081,6 +3759,9 @@ export default function Dashboard() {
                 <div className="space-y-1.5">
                   <LegendRow compact color="#FF8A1F" label="작업 선박" shape="triangle" />
                   <LegendRow compact color="#40E0D0" label="항적" shape="dash" />
+                  <LegendRow compact color="#d946ef" label="금일 항로·꼭짓점" shape="circle-sm" />
+                  <LegendRow compact color="#bef264" label="살포 예정(계획)" shape="circle-sm" />
+                  <LegendRow compact color="#fef08a" label="내비 안내선" shape="dash" />
                   <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
                     <LegendRow compact color={dropAgeColors("recent").fill}   label="최근 살포(≈45일 이내)" shape="circle-sm" />
                     <LegendRow compact color={dropAgeColors("orange3m").fill} label="약 3개월 전후"           shape="circle-sm" />
@@ -3137,14 +3818,15 @@ function FloatBtn({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
-      className="h-11 w-11 rounded-xl flex items-center justify-center text-white/75 hover:text-white transition-all duration-150 hover:scale-110 active:scale-95"
+      className="flex h-11 w-11 items-center justify-center rounded-xl text-white/85 transition-colors duration-100 hover:bg-white/[0.08] hover:text-white active:scale-[0.97]"
       style={{
-        background: "linear-gradient(160deg, rgba(12,39,72,0.92) 0%, rgba(8,27,52,0.96) 100%)",
+        background: "linear-gradient(160deg, rgba(12,39,72,0.96) 0%, rgba(8,27,52,0.98) 100%)",
         backdropFilter: "blur(8px)",
-        border: "1px solid rgba(64,224,208,0.25)",
-        boxShadow: "0 2px 14px rgba(0,0,0,0.45)",
+        border: "1px solid rgba(255,255,255,0.28)",
+        boxShadow: "0 2px 14px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
       }}
     >
       {children}

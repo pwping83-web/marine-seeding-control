@@ -2,7 +2,32 @@
  * VisionRoadmapModal.tsx — 관공서 심플 설명용 무인화 고도화 모달
  */
 
-import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ClipboardList,
+  Gamepad2,
+  Keyboard,
+  Landmark,
+  Mountain,
+  MousePointer2,
+  RadioTower,
+  Shield,
+  Ship,
+  SlidersHorizontal,
+  Square,
+  Target,
+  Video,
+  Wrench,
+  X,
+  Zap,
+} from "lucide-react";
 
 /** 작업 계획·예약 모달과 동일한 패널 톤(진청록 + 틸 테두리) */
 const WP_PANEL: CSSProperties = {
@@ -19,7 +44,15 @@ const WP_CHIP: CSSProperties = {
   color: "#a5f3fc",
 };
 
-// ─── CCTV 화면 미리보기 ───────────────────────────────────────────────────────
+function phaseIcon(status: "done" | "next" | "future"): ReactNode {
+  if (status === "done") {
+    return <CheckCircle2 className="h-5 w-5 text-emerald-300/95" strokeWidth={2} aria-hidden />;
+  }
+  if (status === "next") {
+    return <Wrench className="h-5 w-5 text-cyan-200/95" strokeWidth={2} aria-hidden />;
+  }
+  return <Target className="h-5 w-5 text-slate-300/90" strokeWidth={2} aria-hidden />;
+}
 
 function CctvPreview({ label }: { label: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -69,12 +102,17 @@ function CctvPreview({ label }: { label: string }) {
 
 function RcPreview() {
   const [held, setHeld] = useState("");
-  const btns = [
-    { key: "up",    label: "▲", row: 0, col: 1 },
-    { key: "left",  label: "◄", row: 1, col: 0 },
-    { key: "stop",  label: "■", row: 1, col: 1 },
-    { key: "right", label: "►", row: 1, col: 2 },
-    { key: "down",  label: "▼", row: 2, col: 1 },
+  const btns: {
+    key: string;
+    row: number;
+    col: number;
+    node: ReactNode;
+  }[] = [
+    { key: "up", row: 0, col: 1, node: <ChevronUp className="h-5 w-5" strokeWidth={2.25} aria-hidden /> },
+    { key: "left", row: 1, col: 0, node: <ChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden /> },
+    { key: "stop", row: 1, col: 1, node: <Square className="h-4 w-4 fill-current" strokeWidth={2} aria-hidden /> },
+    { key: "right", row: 1, col: 2, node: <ChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden /> },
+    { key: "down", row: 2, col: 1, node: <ChevronDown className="h-5 w-5" strokeWidth={2.25} aria-hidden /> },
   ];
   return (
     <div className="relative flex flex-col items-center gap-2 rounded-xl p-4" style={WP_INSET}>
@@ -95,7 +133,7 @@ function RcPreview() {
                   color: on ? "#22d3ee" : "#ffffff50",
                   transform: on ? "scale(0.9)" : "scale(1)",
                 }}>
-                {b.label}
+                {b.node}
               </button>
             );
           })}
@@ -120,7 +158,6 @@ function RcPreview() {
 const PHASES = [
   {
     num: 1, title: "1단계 · 현재 운영 중", status: "done" as const,
-    icon: "✅",
     summary: "기상·예보 데이터와 규칙 기반 판정으로 위험도를 산출하고, 관제탑과 선박 간 실시간 양방향 통신을 전제로 합니다.",
     items: [
       "기상청 API → AI 8시간 예측 · 출항 가부 자동 판정",
@@ -133,10 +170,9 @@ const PHASES = [
   },
   {
     num: 2, title: "2단계 · 개발 예정", status: "next" as const,
-    icon: "🔧",
     summary: "관제탑에서 CCTV를 보며 RC카처럼 선박을 직접 원격 조종합니다.",
     items: [
-      "항로 네비·속도 제어: 자동 항로·지도 목적지 지정·선속 연동 (관제웹·선박 단말)",
+      "선박 단말·선속 실연동 및 완전 자동 항로(관제웹의 지도·항로·살포 위치 설정은 위 「개발 현재 진행 중」)",
       "선박 CCTV 4채널 실시간 영상 관제탑 수신",
       "키보드·조이스틱으로 방향·속도 직접 제어",
       "AI 자율 운항 ↔ 수동 조종 즉시 전환",
@@ -148,7 +184,6 @@ const PHASES = [
   },
   {
     num: 3, title: "3단계 · 최종 목표", status: "future" as const,
-    icon: "🎯",
     summary: "출입항·작업 준비부터 해상 운항 지원까지 자동화 비중을 높이는 단계를 목표로 합니다(인력 배치는 항상 안전·규정에 따름).",
     items: [
       "완전 무인 자율 살포 운항",
@@ -196,6 +231,52 @@ function TabVision() {
         <p className="mt-2 text-xs text-cyan-200/65 sm:text-sm">정책 참고: 해수부 자율운항·스마트항만 관련 R&D·실증 동향</p>
       </div>
 
+      {/* 고도화 세부 — 음성(완료) / 항로·살포 위치(진행 중) */}
+      <div
+        className="rounded-xl px-3.5 py-3.5 sm:px-5 sm:py-4"
+        style={{ ...WP_PANEL, border: "1px solid rgba(251,191,36,0.28)" }}
+      >
+        <p className="mb-2.5 text-center text-[11px] font-black uppercase tracking-wider text-amber-100/95 sm:text-xs">
+          고도화 영역 · 구현 상태
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg p-3 sm:p-3.5" style={WP_INSET}>
+            <p className="mb-2 text-xs font-black text-emerald-200/95 sm:text-sm">개발 완료</p>
+            <ul className="space-y-1.5 text-[11px] leading-snug text-white/72 sm:text-sm">
+              <li className="flex gap-2">
+                <span className="shrink-0 text-emerald-300/90" aria-hidden>
+                  ✓
+                </span>
+                <span>
+                  <strong className="text-white/85">음성 안내</strong> — 항로 길안내(내비) 브라우저 음성 합성, AI 자막 읽어주기, 날씨 급변 안내 멘트 음성, 음소거·전체 항해 인원용 동기화
+                </span>
+              </li>
+            </ul>
+          </div>
+          <div className="rounded-lg p-3 sm:p-3.5" style={WP_INSET}>
+            <p className="mb-2 text-xs font-black text-amber-200/95 sm:text-sm">개발 현재 진행 중</p>
+            <ul className="space-y-1.5 text-[11px] leading-snug text-white/72 sm:text-sm">
+              <li className="flex gap-2">
+                <span className="shrink-0 text-amber-300/90" aria-hidden>
+                  ◆
+                </span>
+                <span>
+                  <strong className="text-white/85">항로 네비게이션</strong> 고도화 — 지도 꼭짓점·좌표 입력·금일 항적 연동·안내 카드·모달 UX 등
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="shrink-0 text-amber-300/90" aria-hidden>
+                  ◆
+                </span>
+                <span>
+                  <strong className="text-white/85">종자 살포 위치 설정</strong> — 살포 예정점·경로 따라 균등 배치·지도에서 직접 편집 등
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* 단계별 계획 */}
       {PHASES.map((ph, i) => (
         <div key={ph.num} className="flex gap-3 sm:gap-4">
@@ -208,7 +289,7 @@ function TabVision() {
                 border: "2px solid rgba(45,212,191,0.55)",
               }}
             >
-              {ph.icon}
+              {phaseIcon(ph.status)}
             </div>
             {i < PHASES.length - 1 && (
               <div className="mt-1 min-h-[28px] w-0.5 flex-1" style={{ background: lineGrad }} />
@@ -227,7 +308,7 @@ function TabVision() {
             <ul className="space-y-2">
               {ph.items.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm leading-snug text-white/70 sm:text-[15px]">
-                  <span className="mt-1 shrink-0 text-[10px] text-teal-300/90 sm:text-xs">◆</span>
+                  <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-400/80" strokeWidth={2.5} aria-hidden />
                   <span>{item}</span>
                 </li>
               ))}
@@ -252,8 +333,9 @@ function TabCctv() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="rounded-xl p-3.5 sm:p-4" style={WP_PANEL}>
-        <p className="mb-2 text-sm font-black text-cyan-100 sm:text-base">
-          📹 CCTV 실시간 관제{" "}
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-black text-cyan-100 sm:text-base">
+          <Video className="h-4 w-4 shrink-0 text-teal-300/90 sm:h-[18px] sm:w-[18px]" strokeWidth={2} aria-hidden />
+          <span>CCTV 실시간 관제</span>
           <span className="text-xs font-normal text-cyan-200/75 sm:text-sm">개발 예정</span>
         </p>
         <p className="text-sm leading-relaxed text-white/65 sm:text-[15px]">
@@ -283,8 +365,9 @@ function TabRc() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="rounded-xl p-3.5 sm:p-4" style={WP_PANEL}>
-        <p className="mb-2 text-sm font-black text-cyan-100 sm:text-base">
-          🕹️ 관제탑 원격 조종{" "}
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-black text-cyan-100 sm:text-base">
+          <Gamepad2 className="h-4 w-4 shrink-0 text-teal-300/90 sm:h-[18px] sm:w-[18px]" strokeWidth={2} aria-hidden />
+          <span>관제탑 원격 조종</span>
           <span className="text-xs font-normal text-cyan-200/75 sm:text-sm">개발 예정</span>
         </p>
         <p className="text-sm leading-relaxed text-white/65 sm:text-[15px]">
@@ -294,13 +377,13 @@ function TabRc() {
       <RcPreview />
       <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
         {[
-          { icon: "⌨️", label: "키보드·방향키 조종" },
-          { icon: "🎛️", label: "무인 원격 조종기 연동" },
-          { icon: "🛑", label: "비상 즉시 정지" },
-          { icon: "📡", label: "반응 지연 200ms 이하" },
+          { Icon: Keyboard, label: "키보드·방향키 조종" },
+          { Icon: SlidersHorizontal, label: "무인 원격 조종기 연동" },
+          { Icon: Square, label: "비상 즉시 정지" },
+          { Icon: RadioTower, label: "반응 지연 200ms 이하" },
         ].map((i) => (
           <div key={i.label} className="flex items-center gap-2 rounded-lg px-3 py-2.5 sm:py-3" style={WP_INSET}>
-            <span className="text-lg shrink-0 sm:text-xl">{i.icon}</span>
+            <i.Icon className="h-5 w-5 shrink-0 text-teal-300/85 sm:h-5 sm:w-5" strokeWidth={2} aria-hidden />
             <p className="text-sm font-bold leading-snug text-white/75 sm:text-[15px]">{i.label}</p>
           </div>
         ))}
@@ -313,8 +396,9 @@ function TabReef() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="rounded-xl p-3.5 sm:p-4" style={WP_PANEL}>
-        <p className="mb-2 text-sm font-black text-cyan-100 sm:text-base">
-          🪨 암초 센서 · 지도 기록 · 자동 회피{" "}
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-black text-cyan-100 sm:text-base">
+          <Mountain className="h-4 w-4 shrink-0 text-teal-300/90 sm:h-[18px] sm:w-[18px]" strokeWidth={2} aria-hidden />
+          <span>암초 센서 · 지도 기록 · 자동 회피</span>
           <span className="text-xs font-normal text-cyan-200/80 sm:text-sm">개발 예정</span>
         </p>
         <p className="text-sm leading-relaxed text-white/65 sm:text-[15px]">
@@ -346,8 +430,9 @@ function TabSafety() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="rounded-xl p-3.5 sm:p-4" style={WP_PANEL}>
-        <p className="mb-2 text-sm font-black text-cyan-100 sm:text-base">
-          🛡️ 이중 안전 장치{" "}
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-black text-cyan-100 sm:text-base">
+          <Shield className="h-4 w-4 shrink-0 text-teal-300/90 sm:h-[18px] sm:w-[18px]" strokeWidth={2} aria-hidden />
+          <span>이중 안전 장치</span>
           <span className="text-xs font-normal text-cyan-200/75 sm:text-sm">개발 예정</span>
         </p>
         <p className="text-sm leading-relaxed text-white/65 sm:text-[15px]">
@@ -364,11 +449,13 @@ function TabSafety() {
               background: mode === "auto" ? "rgba(45,212,191,0.18)" : "rgba(255,255,255,0.04)",
               border: `1px solid ${mode === "auto" ? "rgba(45,212,191,0.5)" : "rgba(64,224,208,0.15)"}`,
             }}>
-            <p className="mb-1 text-2xl sm:text-3xl">🤖</p>
+            <div className="mb-1 flex justify-center">
+              <Bot className="h-8 w-8 sm:h-9 sm:w-9" strokeWidth={1.75} style={{ color: mode === "auto" ? "#99f6e4" : "rgba(255,255,255,0.28)" }} aria-hidden />
+            </div>
             <p className="text-sm font-black sm:text-base" style={{ color: mode === "auto" ? "#99f6e4" : "rgba(255,255,255,0.35)" }}>AI 자율 운항</p>
           </div>
           <div className="flex shrink-0 flex-col items-center gap-0.5 text-cyan-200/40">
-            <p className="text-base">⚡</p>
+            <Zap className="h-4 w-4" strokeWidth={2} aria-hidden />
             <p className="text-xs font-semibold">즉시</p>
           </div>
           <div className="flex-1 cursor-pointer rounded-xl p-3 text-center transition-all sm:p-4" onClick={() => setMode("manual")}
@@ -376,7 +463,9 @@ function TabSafety() {
               background: mode === "manual" ? "rgba(64,224,208,0.14)" : "rgba(255,255,255,0.04)",
               border: `1px solid ${mode === "manual" ? "rgba(64,224,208,0.45)" : "rgba(64,224,208,0.15)"}`,
             }}>
-            <p className="mb-1 text-2xl sm:text-3xl">🕹️</p>
+            <div className="mb-1 flex justify-center">
+              <Gamepad2 className="h-8 w-8 sm:h-9 sm:w-9" strokeWidth={1.75} style={{ color: mode === "manual" ? "#a5f3fc" : "rgba(255,255,255,0.28)" }} aria-hidden />
+            </div>
             <p className="text-sm font-black sm:text-base" style={{ color: mode === "manual" ? "#a5f3fc" : "rgba(255,255,255,0.35)" }}>수동 조종</p>
           </div>
         </div>
@@ -387,13 +476,13 @@ function TabSafety() {
       <div className="flex flex-col gap-2">
         <p className="text-sm font-semibold text-cyan-200/70 sm:text-base">자동 전환 조건</p>
         {[
-          { icon: "📡", trigger: "GPS 신호가 끊겼을 때",     action: "운항 멈춤 → 수동 대기" },
-          { icon: "🚢", trigger: "충돌 위험이 감지됐을 때",   action: "즉시 정지 + 경보" },
-          { icon: "🖱️", trigger: "관리자가 직접 개입할 때",  action: "즉시 수동 모드 전환" },
-          { icon: "⚠️", trigger: "센서 오류가 반복될 때",    action: "속도 줄임 → 안전 정박" },
+          { Icon: RadioTower, trigger: "GPS 신호가 끊겼을 때",     action: "운항 멈춤 → 수동 대기" },
+          { Icon: Ship, trigger: "충돌 위험이 감지됐을 때",   action: "즉시 정지 + 경보" },
+          { Icon: MousePointer2, trigger: "관리자가 직접 개입할 때",  action: "즉시 수동 모드 전환" },
+          { Icon: AlertTriangle, trigger: "센서 오류가 반복될 때",    action: "속도 줄임 → 안전 정박" },
         ].map((s) => (
           <div key={s.trigger} className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 sm:py-2.5" style={WP_INSET}>
-            <span className="shrink-0 text-lg sm:text-xl">{s.icon}</span>
+            <s.Icon className="h-5 w-5 shrink-0 text-teal-300/80 sm:h-5 sm:w-5" strokeWidth={2} aria-hidden />
             <span className="min-w-0 flex-1 text-sm leading-snug text-white/65 sm:text-[15px]">{s.trigger}</span>
             <span className="shrink-0 text-sm font-bold leading-snug text-teal-200 sm:text-[15px]">{s.action}</span>
           </div>
@@ -435,31 +524,35 @@ export function VisionRoadmapModal({ isOpen, onClose }: Props) {
           className="px-5 py-3.5 flex items-center justify-between shrink-0 border-b"
           style={{ borderColor: "rgba(64,224,208,0.15)", background: "rgba(0,0,0,0.2)" }}
         >
-          <div>
-          <p className="text-white font-black text-base sm:text-lg">🏛️ 해양 무인 살포 시스템 고도화 계획</p>
-          <p className="text-xs text-white/35 mt-1">1단계 운영 중 · 2~3단계 단계적 개발 예정</p>
+          <div className="flex min-w-0 items-start gap-2.5 pr-2">
+            <Landmark className="mt-0.5 h-5 w-5 shrink-0 text-teal-300/90 sm:h-6 sm:w-6" strokeWidth={2} aria-hidden />
+            <div className="min-w-0">
+              <p className="text-white font-black text-base leading-snug sm:text-lg">해양 무인 살포 시스템 고도화 계획</p>
+              <p className="mt-1 text-xs text-white/35">1단계 운영 중 · 2~3단계 단계적 개발 예정</p>
+            </div>
           </div>
-          <button onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-white/35 hover:text-white hover:bg-white/10 transition-colors text-sm">
-            ✕
+          <button type="button" onClick={onClose} aria-label="모달 닫기"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white">
+            <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           </button>
         </div>
 
         {/* 탭 */}
         <div className="flex shrink-0 border-b" style={{ borderColor: "rgba(64,224,208,0.12)" }}>
           {[
-            { id: "vision", label: "📋 단계별 계획" },
-            { id: "cctv",   label: "📹 CCTV 관제" },
-            { id: "rc",     label: "🕹️ 원격 조종" },
-            { id: "reef",   label: "🪨 암초·회피" },
-            { id: "safety", label: "🛡️ 안전 전환" },
+            { id: "vision" as const, Icon: ClipboardList, label: "단계별 계획" },
+            { id: "cctv" as const, Icon: Video, label: "CCTV 관제" },
+            { id: "rc" as const, Icon: Gamepad2, label: "원격 조종" },
+            { id: "reef" as const, Icon: Mountain, label: "암초·회피" },
+            { id: "safety" as const, Icon: Shield, label: "안전 전환" },
           ].map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
-              className="flex-1 py-2.5 text-xs sm:text-sm font-bold transition-colors"
+            <button key={t.id} type="button" onClick={() => setTab(t.id)}
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 sm:flex-row sm:gap-1.5 sm:py-2.5"
               style={tab === t.id
                 ? { color: "#5eead4", borderBottom: "2px solid #2dd4bf" }
                 : { color: "rgba(255,255,255,0.35)", borderBottom: "2px solid transparent" }}>
-              {t.label}
+              <t.Icon className="h-3.5 w-3.5 opacity-90 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+              <span className="text-[10px] font-bold leading-tight sm:text-xs sm:leading-snug">{t.label}</span>
             </button>
           ))}
         </div>
