@@ -5,12 +5,9 @@ import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
-import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
-import {
-  fetchClientAccessGeo,
-  geoToAccessLocationLine,
-  formatAccessTimeKorea,
-} from "@/lib/fetch-client-access-geo";
+// 이메일 알림(EmailJS 로그인 접속 알림) 비활성화
+// import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+import { fetchClientAccessGeo } from "@/lib/fetch-client-access-geo";
 import { reserveSiteAccessLogSlot } from "@/lib/site-access-throttle";
 import { isLoginLocked, recordLoginFailure, resetLoginGuard } from "@/lib/login-brute-guard";
 /* 공인·공동 인증서(GPKI/OIDC 게이트웨이) 로그인 — 현재 미연동으로 비활성화
@@ -20,18 +17,18 @@ import {
 } from "@/lib/gov-cert-login";
 */
 
-async function sendLoginSuccessAccessEmail(): Promise<void> {
-  if (!isEmailJsAccessNotifyConfigured()) return;
-  try {
-    const geo = await fetchClientAccessGeo();
-    await sendAccessNotifyEmail({
-      accessLocation: geoToAccessLocationLine(geo, { forEmail: true }),
-      accessTime: formatAccessTimeKorea(),
-    });
-  } catch (e) {
-    console.warn("[emailjs] 로그인 접속 알림 실패", e);
-  }
-}
+// async function sendLoginSuccessAccessEmail(): Promise<void> {
+//   if (!isEmailJsAccessNotifyConfigured()) return;
+//   try {
+//     const geo = await fetchClientAccessGeo();
+//     await sendAccessNotifyEmail({
+//       accessLocation: geoToAccessLocationLine(geo, { forEmail: true }),
+//       accessTime: formatAccessTimeKorea(),
+//     });
+//   } catch (e) {
+//     console.warn("[emailjs] 로그인 접속 알림 실패", e);
+//   }
+// }
 
 // ─── Bubble data for background particles ─────────────────────────────────────
 const BUBBLES: { left: string; size: number; dur: number; delay: number; opacity: number }[] = [
@@ -139,7 +136,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           return;
         }
         resetLoginGuard();
-        void sendLoginSuccessAccessEmail();
+        // void sendLoginSuccessAccessEmail();
         onSuccess();
       } catch (err) {
         setError(err instanceof Error ? err.message : "연결에 실패했습니다.");
@@ -151,7 +148,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     setTimeout(() => {
       setLoading(false);
       resetLoginGuard();
-      void sendLoginSuccessAccessEmail();
+      // void sendLoginSuccessAccessEmail();
       onSuccess();
     }, 600);
   }
