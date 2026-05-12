@@ -1,7 +1,7 @@
 /**
- * 살포점 지도·이력용 색상 — 구역 라벨(A01 등) 살포와
- * 수동 기록(`YYYY-MM-DD T01` 형태 등)을 날짜(기록 시각) 기준 연령 밴드로 구분한다.
- * (구 라벨 `투하-`·`GNSS-`·`센서-` 도 동일 처리)
+ * 살포점 지도·이력용 색상 — 기록 시각(`recordedAt`) 기준 연령 밴드.
+ * 구역 라벨(A01)·금일 GNSS·`mob-` id 살포는 붉은 연령 계열(`dropAgeColors`).
+ * 구 `투하-`/`GNSS-`/`센서-` 접두 라벨만 청록(`dropTestAgeColors`)으로 구분.
  */
 
 export type DropAgeBand = "recent" | "orange3m" | "pink1y" | "light2y" | "pale";
@@ -14,6 +14,7 @@ export type ParsedManualDropLabel = {
 };
 
 export function dropAgeBand(recordedAt: number, now: number = Date.now()): DropAgeBand {
+  if (!Number.isFinite(recordedAt) || !Number.isFinite(now)) return "recent";
   const days = (now - recordedAt) / 86_400_000;
   if (days <= 45) return "recent";
   if (days < 120) return "orange3m";
@@ -56,11 +57,24 @@ export function dropTestAgeColors(band: DropAgeBand): { fill: string; stroke: st
   }
 }
 
-/** 수동 기록 — 라벨·id 규칙 (구 `투하-`·`GNSS-`·`센서-`·`mob-` id) */
+/**
+ * 수동·테스트 출처(이력 표시·파싱용).
+ * `YYYY-MM-DD T01` 형 GNSS 시험 살포도 포함 — 라벨 정리에 쓴다.
+ */
 export function isManualTestOriginDrop(label: string, id: string): boolean {
   if (/^mob-/u.test(id)) return true;
   const t = label.trim();
   if (/^\d{4}-\d{2}-\d{2} T\d+/u.test(t)) return true;
+  if (/^투하-|^GNSS-|^센서-/u.test(t)) return true;
+  return false;
+}
+
+/**
+ * 지도 마커만 청록 팔레트(`dropTestAgeColors`) — 구역 살포(A01)와 눈에 띄게 구분할 때.
+ * `mob-`·금일 GNSS 시험(`YYYY-MM-DD T##`)은 붉은 연령색과 맞추기 위해 **제외**(레거시 접두만 청록).
+ */
+export function usesTestTealMarkerPalette(label: string, id: string): boolean {
+  const t = label.trim();
   if (/^투하-|^GNSS-|^센서-/u.test(t)) return true;
   return false;
 }
@@ -94,7 +108,7 @@ export function seedDropMarkerColors(opts: {
     return { fill: "#171717", stroke: "#a3a3a3", pulse: "#737373" };
   }
   const band = dropAgeBand(opts.recordedAt, opts.now);
-  if (isManualTestOriginDrop(opts.label, opts.id)) {
+  if (usesTestTealMarkerPalette(opts.label, opts.id)) {
     return dropTestAgeColors(band);
   }
   return dropAgeColors(band);

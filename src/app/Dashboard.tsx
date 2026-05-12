@@ -88,7 +88,6 @@ import { estimateSeedingAreaHa, formatAreaHa, ymdLocal } from "@/lib/seeding-day
 import {
   dropAgeColors,
   dropTestAgeColors,
-  isManualTestOriginDrop,
   parseTestStyleDropLabel,
   seedDropMarkerColors,
 } from "@/lib/seed-drop-visual";
@@ -808,9 +807,13 @@ export default function Dashboard() {
   const [seedingActive, setSeedingActive] = useState(false);
   const [returnCommandModalOpen, setReturnCommandModalOpen] = useState(false);
   const [positionReportToast, setPositionReportToast] = useState<string | null>(null);
+  /** GNSS 모드「센서 시뮬 1건」— 모바일과 동일하게 연타·중복 방지 */
+  const [gpsSensorSimBusy, setGpsSensorSimBusy] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "schedule">("map");
   const [manualOpen, setManualOpen] = useState(false);
   const [mapMode, setMapMode] = useState<MapMode>("test");
+  const mapModeRef = useRef<MapMode>(mapMode);
+  mapModeRef.current = mapMode;
   const [gpsVessel, setGpsVessel] = useState<{
     lat: number;
     lng: number;
@@ -1156,31 +1159,30 @@ export default function Dashboard() {
       setGpsError("이 브라우저는 위치 정보를 지원하지 않습니다.");
       return;
     }
-    let cancelled = false;
+    /** Strict Mode 등에서 cleanup 직후 도착한 콜백이 `cancelled`로 스킵되면 좌표가 영구 null → 안내 문구만 남는 문제 방지 */
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        if (cancelled) return;
+        if (mapModeRef.current !== "real") return;
         applyGeolocationCoords(pos.coords);
       },
       (err) => {
-        if (cancelled) return;
+        if (mapModeRef.current !== "real") return;
         setGpsError(geolocationErrorMessage(err));
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 }
     );
     geoWatchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        if (cancelled) return;
+        if (mapModeRef.current !== "real") return;
         applyGeolocationCoords(pos.coords);
       },
       (err) => {
-        if (cancelled) return;
+        if (mapModeRef.current !== "real") return;
         setGpsError(geolocationErrorMessage(err));
       },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 25_000 }
     );
     return () => {
-      cancelled = true;
       if (geoWatchRef.current) {
         navigator.geolocation.clearWatch(geoWatchRef.current);
         geoWatchRef.current = 0;
@@ -1715,10 +1717,12 @@ export default function Dashboard() {
     if (mapMode === "real" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          if (mapModeRef.current !== "real") return;
           applyGeolocationCoords(pos.coords);
           setMapFitNonce((n) => n + 1);
         },
         (err) => {
+          if (mapModeRef.current !== "real") return;
           setGpsError(geolocationErrorMessage(err));
           setMapFitNonce((n) => n + 1);
         },
@@ -1729,17 +1733,17 @@ export default function Dashboard() {
     setMapFitNonce((n) => n + 1);
   }, [mapMode, applyGeolocationCoords]);
 
-  /** 실시간 내 위치(GNSS) 모드: 현재 좌표에 살포 1건 시험 기록 — 클릭당 1건, 금일 날짜·시각·위경도 반영 */
-  const handleGpsTestSeedDrop = useCallback(() => {
-    if (mapMode !== "real" || !gpsVessel) return;
-    counter.current += 1;
+  /** GNSS 모드: 모바일「센서 시뮬 1건」과 동일 — 살포 시작 후에만, 현재 GPS에 1건 기록 */
+  const handleGpsSensorSimDrop = useCallback(() => {
+    if (mapMode !== "real" || !gpsVessel || !seedingActive || gpsSensorSimBusy) return;
+    setGpsSensorSimBusy(true);
     const recordedAt = Date.now();
     gpsTestDropSeqRef.current += 1;
     const seq = gpsTestDropSeqRef.current;
     const ymd = ymdLocal(new Date(recordedAt));
     const jitter = () => (Math.random() - 0.5) * 0.00006;
     const newDrop: SeedDrop = {
-      id: String(counter.current).padStart(4, "0"),
+      id: `mob-${recordedAt}-${seq}`,
       label: `${ymd} T${String(seq).padStart(2, "0")}`,
       time: fmt(new Date(recordedAt)),
       lat: parseFloat((gpsVessel.lat + jitter()).toFixed(6)),
@@ -1763,9 +1767,10 @@ export default function Dashboard() {
       }
       return next;
     });
-    setPositionReportToast("테스트 살포 1건을 현재 GNSS 위치·금일 시각으로 기록했습니다.");
+    setPositionReportToast("센서 시뮬 1건을 현재 GNSS 위치에 기록했습니다.");
     window.setTimeout(() => setPositionReportToast(null), 3200);
-  }, [mapMode, gpsVessel]);
+    window.setTimeout(() => setGpsSensorSimBusy(false), 320);
+  }, [mapMode, gpsVessel, seedingActive, gpsSensorSimBusy]);
 
   // Mouse wheel zoom
   useEffect(() => {
@@ -2444,8 +2449,7 @@ export default function Dashboard() {
                 [...filteredDrops].reverse().map((d) => {
                   const isNew = d.id === latestId;
                   const accent = sidebarHistoryRowAccent(d, isNew);
-                  const testOrigin = isManualTestOriginDrop(d.label, d.id);
-                  const testParts = testOrigin ? parseTestStyleDropLabel(d.label) : null;
+                  const testParts = parseTestStyleDropLabel(d.label);
                   return (
                     <div
                       key={d.id}
@@ -2954,20 +2958,34 @@ export default function Dashboard() {
               />
               <span className="leading-none">내 위치 찾기</span>
             </button>
-            {isRealWithGps ? (
+            {mapMode === "real" ? (
               <button
                 type="button"
-                onClick={handleGpsTestSeedDrop}
-                title="현재 GNSS 좌표에 종자 살포 1건을 시험 기록합니다. 누를 때마다 1건씩 추가됩니다."
-                className="flex items-center gap-2.5 rounded-lg border border-emerald-400/55 bg-emerald-600/90 px-3.5 py-2.5 text-[11px] font-semibold tracking-tight text-[#041c2e] shadow-lg backdrop-blur-sm transition-colors hover:bg-emerald-500"
+                disabled={gpsSensorSimBusy || !seedingActive || !gpsVessel}
+                title={
+                  !gpsVessel
+                    ? "위치 권한·수신 후 활성화됩니다."
+                    : !seedingActive
+                      ? "살포 중일 때만 센서 트리거를 시뮬할 수 있습니다."
+                      : "현재 GPS 위치에 살포 1건을 기록합니다(센서 1회 트리거와 동일)."
+                }
+                onClick={() => void handleGpsSensorSimDrop()}
+                className="group flex min-h-[52px] w-full max-w-[14.5rem] flex-row items-center justify-center gap-2 overflow-hidden rounded-lg border border-emerald-500/40 bg-gradient-to-b from-emerald-950/90 via-[#052018] to-[#020807] px-3 py-2.5 text-left text-emerald-50 shadow-lg backdrop-blur-sm transition-[transform,box-shadow] hover:brightness-105 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45"
               >
-                <Droplets className="h-[18px] w-[18px] shrink-0 stroke-[2.25]" aria-hidden />
-                <span className="leading-none">테스트 살포 1건</span>
+                <Droplets
+                  className="h-[18px] w-[18px] shrink-0 text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]"
+                  strokeWidth={2.25}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex flex-col items-start gap-0.5">
+                  <span className="text-[12px] font-black leading-none tracking-tight">센서 시뮬 1건</span>
+                  <span className="text-[8px] font-semibold text-emerald-300/55">현재 위치에 1건 · 지도에 표시</span>
+                </div>
               </button>
             ) : null}
             {mapMode === "real" && !gpsError && !gpsVessel ? (
               <p className="max-w-[14rem] rounded-md border border-cyan-500/30 bg-[#041c2e]/90 px-2 py-1 text-[10px] text-cyan-100/90 shadow-md">
-                위치 권한을 허용하면 지도가 내 위치로 이동합니다.
+                GNSS 좌표를 기다리는 중입니다. 브라우저에서 위치를 허용했는지·HTTPS(또는 localhost)인지 확인하세요.
               </p>
             ) : null}
             {gpsError ? (
@@ -3050,10 +3068,13 @@ export default function Dashboard() {
                 <div className="mb-2 space-y-1.5 text-[11px] leading-relaxed text-white/55">
                   <p>살포 점 색은 <strong className="text-slate-200/90">기록 시각이 얼마나 지났는지</strong>(기간)에 따라 붉은 계열 단계가 바뀝니다.</p>
                   <p>
-                    라벨이 <span className="font-mono text-cyan-200/90">YYYY-MM-DD T01</span> 형태인 수동 기록은 같은 기간 구간이라도{" "}
-                    <strong className="text-cyan-100/90">청록 계열</strong>로 구역 살포(A01 등)와 구분됩니다. (옛날{" "}
+                    구역 살포(A01 등)와 금일 GNSS 시험 살포(
+                    <span className="font-mono text-slate-200/90">YYYY-MM-DD T01</span>)는 모두 위 붉은 계열 단계를 씁니다.
+                  </p>
+                  <p>
                     <span className="font-mono text-cyan-200/80">투하-</span>·<span className="font-mono text-cyan-200/80">GNSS-</span>·
-                    <span className="font-mono text-cyan-200/80">센서-</span> 라벨도 동일)
+                    <span className="font-mono text-cyan-200/80">센서-</span> 접두 라벨만 아래 <strong className="text-cyan-100/90">청록</strong>으로 표시합니다.
+                    (<span className="font-mono text-slate-200/80">mob-</span> id·날짜 <span className="font-mono text-slate-200/80">T##</span> 는 위 붉은 계열과 동일)
                   </p>
                   <p>검정은 살포했으나 검수 시 위치가 맞지 않거나 누락된 부분입니다.</p>
                 </div>
@@ -3069,7 +3090,7 @@ export default function Dashboard() {
                     <LegendRow compact color="#171717"                        label="검수 불일치·누락(검정)"    shape="circle-sm" />
                   </div>
                   <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
-                    <p className="text-[10px] font-medium text-cyan-200/75">수동 기록(날짜 T순번) — 기간 단계는 위와 동일</p>
+                    <p className="text-[10px] font-medium text-cyan-200/75">레거시·모바일 전용(청록)</p>
                     <LegendRow compact color={dropTestAgeColors("recent").fill}   label="최근(≈45일 이내)" shape="circle-sm" />
                     <LegendRow compact color={dropTestAgeColors("orange3m").fill} label="약 3개월 전후"   shape="circle-sm" />
                     <LegendRow compact color={dropTestAgeColors("pink1y").fill}   label="약 1년 전후"     shape="circle-sm" />
