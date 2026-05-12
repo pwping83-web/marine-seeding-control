@@ -36,11 +36,13 @@ export async function analyzeWeatherWithGroq(params: {
   visibility: number; // 시정 km
   assessment: EmergencyAssessment;
   minutesToDanger: number | null; // null = 위험 없음
+  /** 관제 화면과 동일한 ‘지금’ 데이터 출처 안내(예보·상황보고 등) */
+  nowcastContext?: string;
 }): Promise<GroqWeatherReport | null> {
   const key = import.meta.env.VITE_GROQ_API_KEY?.trim();
   if (!key) return null;
 
-  const { windSpeed, waveHeight, temp, pop, visibility, assessment, minutesToDanger } = params;
+  const { windSpeed, waveHeight, temp, pop, visibility, assessment, minutesToDanger, nowcastContext } = params;
 
   const dangerText = minutesToDanger !== null
     ? `약 ${Math.floor(minutesToDanger / 60)}시간 ${minutesToDanger % 60}분 후 위험 기상 도달 예상`
@@ -58,6 +60,7 @@ export async function analyzeWeatherWithGroq(params: {
 - AI 판정 레벨: ${assessment.level}
 - 위험 도달 예측: ${dangerText}
 ${assessment.triggers.length > 0 ? `- 트리거 조건: ${assessment.triggers.join(", ")}` : ""}
+${nowcastContext?.trim() ? `\n[지금 구간 데이터 출처]\n${nowcastContext.trim()}` : ""}
 
 다음 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 {"summary":"한 줄 핵심 요약(20자 이내)","detail":"2~3문장 상세 분석","action":"관제탑 권고 행동 1문장"}

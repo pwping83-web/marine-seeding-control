@@ -675,6 +675,15 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               </button>
             </form>
 
+            <p className="mt-4 text-center">
+              <a
+                href="/mobile"
+                className="text-xs font-medium text-teal-300/90 underline decoration-teal-400/40 underline-offset-2 hover:text-teal-200"
+              >
+                함정용 간편 화면 (/mobile) — 로그인 후 열림
+              </a>
+            </p>
+
             {/* ── Footer info ──────────────────────────────────────── */}
             <div
               className="mt-6 pt-5"

@@ -31,12 +31,14 @@ export async function analyzeWorkPlanBriefWithGroq(params: {
   local: WorkRecommendationLocal;
   /** 관제자가 적은 현장·상황 메모(있으면 보조 문구에 반영) */
   userNote?: string;
+  /** 풍속·파고 등 ‘지금’ 수치의 출처(예보·상황보고) — AI가 문맥에 맞게 언급 */
+  nowcastContext?: string;
 }): Promise<WorkPlanGroqBrief | null> {
   if (!isGroqConfigured()) return null;
   const key = import.meta.env.VITE_GROQ_API_KEY?.trim();
   if (!key) return null;
 
-  const { safetyLevel, windMps, waveM, temp, local, userNote } = params;
+  const { safetyLevel, windMps, waveM, temp, local, userNote, nowcastContext } = params;
   const note = (userNote ?? "").trim();
   const noteBlock =
     note.length > 0
@@ -61,6 +63,7 @@ ${note.slice(0, 2000)}`
 [현재 수치]
 - 안전레벨: ${safetyLevel}
 - 풍속 ${windMps.toFixed(1)} m/s, 파고 ${waveM.toFixed(1)} m, 기온 ${temp.toFixed(0)}°C${noteBlock}
+${nowcastContext?.trim() ? `\n[지금 구간 데이터 출처]\n${nowcastContext.trim()}` : ""}
 
 다음 JSON만 출력 (다른 텍스트 없이):
 {"timeHint":"40자 이내","workloadHint":"40자 이내","scopeHint":"40자 이내","caution":"32자 이내","attachmentHint":"40자 이내","operationHint":"40자 이내"}

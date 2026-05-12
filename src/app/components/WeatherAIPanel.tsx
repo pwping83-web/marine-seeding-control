@@ -59,7 +59,7 @@ interface Props {
   onScoresChange?: (scores: import("@/lib/kma-weather").SlotScore[]) => void;
   /** Groq AI 한 줄 요약 변경 시 상위 컴포넌트로 전달 */
   onGroqSummaryChange?: (summary: string) => void;
-  /** 현재 선박 실측 기상값 (아두이노·외부 센서에서 올라온 값. 없으면 예보 최신 슬롯 사용) */
+  /** 관제 화면 `weather`와 동기(기상청 예보 또는 현장 상황보고). 전달 시 긴급·Groq·표시 수치가 이 값 우선. */
   liveWeather?: {
     windSpeed: number;
     windDir: number;
@@ -69,6 +69,8 @@ interface Props {
     pop?: number;
     sky?: number;
   };
+  /** Groq 기상 요약에 넣는 ‘지금’ 데이터 출처 문구 */
+  groqNowcastContext?: string;
   /** 컴팩트 모드: 헤더 영역 최소화 */
   compact?: boolean;
 }
@@ -103,7 +105,15 @@ function AlertBanner({ level, message }: { level: EmergencyAssessment["level"]; 
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
-export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScoresChange, onGroqSummaryChange, liveWeather, compact }: Props) {
+export function WeatherAIPanel({
+  onEmergencyReturn,
+  onSafetyLevelChange,
+  onScoresChange,
+  onGroqSummaryChange,
+  liveWeather,
+  groqNowcastContext,
+  compact,
+}: Props) {
   const [slots, setSlots] = useState<KmaHourSlot[]>([]);
   const [plan, setPlan] = useState<DeparturePlan | null>(null);
   const [emergency, setEmergency] = useState<EmergencyAssessment>({
@@ -168,6 +178,13 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
       const src = liveWeather ?? nowSlot;
       if (!src) return;
 
+      const visSlot = {
+        sky: ("sky" in src && src.sky != null ? src.sky : liveWeather?.sky) ?? 1,
+        ptyCode: ("ptyCode" in src && src.ptyCode != null ? src.ptyCode : liveWeather?.ptyCode) ?? 0,
+        pop: ("pop" in src && src.pop != null ? src.pop : liveWeather?.pop) ?? 0,
+      };
+      const visibilityKm = estimatedVisibilityKmFromSlot(visSlot);
+
       const assessment = assessEmergency({
         windSpeed: src.windSpeed,
         windDir: "windDir" in src ? src.windDir : liveWeather?.windDir ?? 0,
@@ -207,12 +224,10 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
             waveHeight: "waveHeight" in src ? (src as KmaHourSlot).waveHeight : liveWeather?.waveHeight ?? 0,
             temp: "temp" in src ? (src as KmaHourSlot).temp : liveWeather?.temp ?? 15,
             pop: "pop" in src ? (src as KmaHourSlot).pop : liveWeather?.pop ?? 0,
-            visibility:
-              "sky" in src && "ptyCode" in src && "pop" in src
-                ? estimatedVisibilityKmFromSlot(src as KmaHourSlot)
-                : 10,
+            visibility: visibilityKm,
             assessment,
             minutesToDanger,
+            nowcastContext: groqNowcastContext,
           }).then((report) => {
             if (report) {
               setGroqReport(report);
@@ -226,7 +241,7 @@ export function WeatherAIPanel({ onEmergencyReturn, onSafetyLevelChange, onScore
     evaluate();
     const id = setInterval(evaluate, REALTIME_CHECK_MS);
     return () => clearInterval(id);
-  }, [slots, plan, liveWeather, onEmergencyReturn, onSafetyLevelChange, onGroqSummaryChange]);
+  }, [slots, plan, liveWeather, groqNowcastContext, onEmergencyReturn, onSafetyLevelChange, onGroqSummaryChange]);
 
   // ─── 렌더 ──────────────────────────────────────────────────────────────────
 

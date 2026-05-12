@@ -380,6 +380,37 @@ export function kmaSlotToDashboardWeather(slot: KmaHourSlot): {
   };
 }
 
+/** 현장 상황보고 수치 → `KmaHourSlot` (출항 점수·긴급 판정 파이프라인과 동일 형식). */
+export function kmaSlotFromFieldReport(
+  w: Pick<KmaHourSlot, "windSpeed" | "windDir" | "waveHeight" | "temp">,
+  extras?: Partial<Pick<KmaHourSlot, "ptyCode" | "pop" | "sky">>,
+): KmaHourSlot {
+  const kst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const mm = String(kst.getMonth() + 1).padStart(2, "0");
+  const dd = String(kst.getDate()).padStart(2, "0");
+  const date = `${kst.getFullYear()}-${mm}-${dd}`;
+  const hour = `${String(kst.getHours()).padStart(2, "0")}00`;
+  const skyRaw = extras?.sky;
+  const sky =
+    skyRaw === 1 || skyRaw === 3 || skyRaw === 4 ? skyRaw : 1;
+  const ptyRaw = extras?.ptyCode;
+  const ptyCode =
+    ptyRaw === 0 || ptyRaw === 1 || ptyRaw === 3 || ptyRaw === 4 ? ptyRaw : 0;
+  const pop = Math.max(0, Math.min(100, extras?.pop ?? 0));
+  return {
+    date,
+    hour,
+    windSpeed: w.windSpeed,
+    windDir: w.windDir,
+    waveHeight: w.waveHeight,
+    temp: w.temp,
+    ptyCode,
+    pcp: 0,
+    pop,
+    sky,
+  };
+}
+
 /** 기상청 단기예보 API 실제 호출. 실패 시 null 반환(호출자에서 목업으로 대체). */
 export async function fetchKmaForecast(
   options: {

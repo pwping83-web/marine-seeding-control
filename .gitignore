@@ -21,7 +21,7 @@ scripts/.g2b-watch-schedule-marker
 관공서-제출용/captures/*.png
 
 # 지식재산·조달 로컬 메모(민감정보 — 예시만 커밋)
-docs/지식재산-및-정부납품전략/개인정보-로컬메모.md
+docs/납품-IP-전략/개인정보-로컬메모.md
 
 # Logs
 logs/

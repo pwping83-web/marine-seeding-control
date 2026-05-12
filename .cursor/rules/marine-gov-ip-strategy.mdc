@@ -1,14 +1,14 @@
 ---
 description: 정부·공공 납품·조달, 나라장터 OpenAPI 알림, 지식재산·긴급지원·출원 연계 질문 시 이 레포 전략 문서를 우선 반영
 globs:
-  - "docs/지식재산-및-정부납품전략/**"
+  - "docs/납품-IP-전략/**"
   - "scripts/g2b-bid-watch.mjs"
   - "scripts/gov-announce-watch.mjs"
   - "scripts/gov-announce-watch.config.json"
   - "scripts/bizinfo24-pblanc.mjs"
   - "scripts/bizinfo24-pblanc.config.json"
   - "scripts/grant-watch/**"
-  - "docs/지원사업/**"
+  - "docs/사업-공고/**"
   - ".env.example"
 ---
 
@@ -16,7 +16,7 @@ globs:
 
 ## 언제 이 규칙을 쓰는가
 
-사용자가 **나라장터·입찰·조달·정부 납품·판매·공공 R&D·특허·실용신안·상표·디자인·지식재산 긴급지원·증빙·제안서** 를 말하면, 우선 `docs/지식재산-및-정부납품전략/` 를 읽고 답한다. `scripts/g2b-bid-watch.mjs` 와 `.env.example` 의 알림 설정과 연결해 설명한다.
+사용자가 **나라장터·입찰·조달·정부 납품·판매·공공 R&D·특허·실용신안·상표·디자인·지식재산 긴급지원·증빙·제안서** 를 말하면, 우선 `docs/납품-IP-전략/` 를 읽고 답한다. `scripts/g2b-bid-watch.mjs` 와 `.env.example` 의 알림 설정과 연결해 설명한다.
 
 **나라장터 외 공고** 는 `npm run gov:announce` / `gov:announce:json` 으로 전체 매칭 목록을, `npm run gov:announce:watch` 로 **신규만**(상태 파일·선택 웹훅/ntfy) 받는다. 소스: K-Startup, NGII, KIMST, 해수부 공지, 국해원 입찰. 설정은 `scripts/gov-announce-watch.config.json` , 예약 등록은 `scripts/Register-GovAnnounceWatchScheduledTask.ps1` .
 
@@ -35,8 +35,8 @@ globs:
 
 ## 콘텐츠 우선순위
 
-1. `docs/지식재산-및-정부납품전략/정부납품-크롤링-연구목표.md`
-2. `docs/지식재산-및-정부납품전략/공공정보수집-및-문의-루트.md` (나라장터 외 부처·문의 루트)
-3. `docs/지식재산-및-정부납품전략/지식재산긴급지원-체크리스트.md`
-4. `docs/지식재산-및-정부납품전략/문서-인덱스.md` (로컬 PDF 위치만)
+1. `docs/납품-IP-전략/정부납품-크롤링-연구목표.md`
+2. `docs/납품-IP-전략/공공정보수집-및-문의-루트.md` (나라장터 외 부처·문의 루트)
+3. `docs/납품-IP-전략/지식재산긴급지원-체크리스트.md`
+4. `docs/납품-IP-전략/문서-인덱스.md` (로컬 PDF 위치만)
 5. 사용자가 레포에 둔 `개인정보-로컬메모.md`가 있으면 **로컬 한정** 참고(커밋 금지)

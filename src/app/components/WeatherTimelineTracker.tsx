@@ -11,6 +11,8 @@ interface Props {
   scores: SlotScore[];
   slotCount?: number;
   safetyLevel: "안전" | "주의" | "긴급";
+  /** 지금·예보 데이터 출처 한 줄(예: 상황보고/단기예보) */
+  subtitle?: string;
 }
 
 function slotHour(offset: number) {
@@ -29,7 +31,7 @@ function slotColor(verdict: string, score: number) {
   return { bg: "#0d9488", fill: "rgba(13,148,136,0.85)", dim: "rgba(20,184,166,0.28)", ring: "rgba(45,212,191,0.4)" };
 }
 
-export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: Props) {
+export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel, subtitle }: Props) {
   const slots = scores.slice(0, slotCount);
   const [, setTick] = useState(0);
 
@@ -63,9 +65,10 @@ export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: P
   const accentGlow = isDanger ? "rgba(248,113,113,0.22)" : isCaution ? "rgba(251,191,36,0.18)" : "rgba(45,212,191,0.16)";
 
   return (
+    <>
     <div
       className="pointer-events-none absolute z-[25] w-[min(28rem,calc(100vw-2rem))] select-none"
-      style={{ bottom: "1.15rem", left: "50%", transform: "translateX(-50%)" }}
+      style={{ bottom: subtitle ? "1.65rem" : "1.15rem", left: "50%", transform: "translateX(-50%)" }}
     >
       <style>{`
         @keyframes wtt-slot-pulse {
@@ -180,5 +183,16 @@ export function WeatherTimelineTracker({ scores, slotCount = 8, safetyLevel }: P
         </div>
       </div>
     </div>
+    {subtitle ? (
+      <div
+        className="pointer-events-none absolute z-[24] w-[min(28rem,calc(100vw-2rem))] select-none text-center"
+        style={{ bottom: "0.35rem", left: "50%", transform: "translateX(-50%)" }}
+      >
+        <p className="mx-auto max-w-[98%] truncate px-1 text-[8px] leading-tight text-slate-400/95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+          {subtitle}
+        </p>
+      </div>
+    ) : null}
+    </>
   );
 }

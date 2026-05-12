@@ -1,5 +1,7 @@
 # 지식재산·정부 납품 전략 (프로젝트 내부 요약)
 
+> **폴더 위치:** `docs/납품-IP-전략/` (예전 이름 `docs/지식재산-및-정부납품전략/` — [`docs/README.md`](../README.md) 참고)
+
 전체 문서 목차는 [`docs/README.md`](../README.md) 를 참고하세요.
 
 이 폴더는 **해상 종자살포 관제 시스템**을 정부·공공에 납품·판매하기 위한 연구, **나라장터 등 공고 알림**, **지식재산(특허·실용신안·상표·디자인) 및 긴급지원**을 한곳에서 다루기 위한 자료입니다.
@@ -21,8 +23,8 @@
 
 ## 코드와의 연결
 
-- 나라장터 **용역·물품·공사** 공고 조회·알림: `scripts/g2b-bid-watch.mjs`, `pnpm run g2b:watch` (`G2B_BID_TYPES`)
-- **관공서 제출용 화면 캡처**: `관공서-제출용/` + `pnpm run capture:gov` (`pnpm dev` 선행)
+- 나라장터 **용역·물품·공사** 공고 조회·알림: `scripts/g2b-bid-watch.mjs`, `npm run g2b:watch` (`G2B_BID_TYPES`)
+- **관공서 제출용 화면 캡처**: `관공서-제출용/` + `npm run capture:gov` (`npm run dev` 선행)
 - 환경 변수 예시: `.env.example`의 `DATA_GO_KR_SERVICE_KEY`, `G2B_KEYWORDS` 등
 
 ## 에이전트 동작

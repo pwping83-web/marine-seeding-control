@@ -13,13 +13,13 @@
 ## 생성 방법
 
 1. 캡처할 화면이 떠 있어야 합니다.  
-   - **로컬 시연:** `pnpm dev` (기본 `http://localhost:5111` — `vite.config.ts` 의 `DEV_PORT`)  
+   - **로컬 시연:** `npm run dev` (기본 `http://localhost:5111/` — `vite.config.ts` 의 `DEV_PORT` 5111)  
    - **문서 기준 LAN 시연:** `http://192.168.45.214:5111/`  
    - **배포 URL만 캡처:** 서버 없이 `https://marine-seeding-control-git-main-pwping83-webs-projects.vercel.app/` 지정 가능
 2. 다른 터미널에서:
 
 ```bash
-pnpm run capture:gov
+npm run capture:gov
 ```
 
 환경 변수(선택):

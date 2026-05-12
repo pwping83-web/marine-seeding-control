@@ -132,7 +132,7 @@ const outDir = path.resolve(root, cfg.outputDir || 'artifacts/grant-watch');
 fs.mkdirSync(outDir, { recursive: true });
 const docsOutPath = path.resolve(
   root,
-  cfg.docsOutputPath || 'docs/지원사업/99_공고-모니터링-최근결과.md',
+  cfg.docsOutputPath || 'docs/사업-공고/99_공고-모니터링-최근결과.md',
 );
 fs.mkdirSync(path.dirname(docsOutPath), { recursive: true });
 

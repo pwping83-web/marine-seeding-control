@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from "
 import { createRoot } from "react-dom/client";
 import Dashboard from "./app/Dashboard.tsx";
 import LoginPage from "./app/LoginPage.tsx";
+import MobileDeckView, { isMobileDeckPath } from "./app/MobileDeckView.tsx";
 import {
   SITE_DEPRECATED_PREVIEW_HOST,
   SITE_PRODUCTION_ORIGIN,
@@ -22,11 +23,21 @@ function DeprecatedHostRedirect() {
 
 function Root() {
   const [authed, setAuthed] = useState(false);
+  const [mobileDeck, setMobileDeck] = useState(() => isMobileDeckPath());
+
+  useEffect(() => {
+    const sync = () => setMobileDeck(isMobileDeckPath());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
   return (
     <>
       <DeprecatedHostRedirect />
       {!authed ? (
         <LoginPage onSuccess={() => setAuthed(true)} />
+      ) : mobileDeck ? (
+        <MobileDeckView />
       ) : (
         <Dashboard />
       )}

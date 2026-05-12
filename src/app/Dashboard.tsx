@@ -14,6 +14,7 @@ import {
   ArrowUp,
   Calendar,
   CheckCircle2,
+  ClipboardList,
   Compass,
   Download,
   Droplets,
@@ -56,11 +57,14 @@ import {
 } from "@/lib/marine-db";
 import { OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
 import { WeatherAIPanel } from "./components/WeatherAIPanel";
+import { FieldWeatherReportModal, type FieldWeatherReportPayload } from "./components/FieldWeatherReportModal";
 import { EmergencyPanel } from "./components/EmergencyPanel";
 import { VisionRoadmapModal } from "./components/VisionRoadmapModal";
 import {
   scoreHourSlot,
   generateMockForecast,
+  isKmaApiConfigured,
+  kmaSlotFromFieldReport,
   kmaSlotToDashboardWeather,
   pickCurrentOrNextKmaSlot,
   type EmergencyAssessment,
@@ -120,8 +124,7 @@ interface SignalEntry {
   ack: boolean;
 }
 
-/** Supabase 없을 때 동일 출처 탭 간 선박 신호 시연 동기화 */
-const MARINE_OPS_SIGNAL_BC = "marine-ops-signals-v1";
+import { MARINE_OPS_SIGNAL_BC } from "@/lib/marine-ops-signals";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -134,6 +137,22 @@ const VESSEL_NAME = "제3해양살포함";
 function vesselLteIdFromEnv(): string {
   const v = import.meta.env.VITE_VESSEL_LTE_ID?.trim();
   return v && v.length > 0 ? v : VESSEL_NAME;
+}
+
+type SafetyTri = "안전" | "주의" | "긴급";
+
+/**
+ * `assessEmergency`(즉시 회항 임계)와 타임라인 첫 슬롯 `scoreHourSlot`(가능/주의/불가)를 합친 표시용 등급.
+ * 첫 슬롯이 `불가`인데 긴급 임계만으로는 `안전`이면 하단「지금 위험」과 사이드바 문구가 어긋나므로 더 보수적으로 맞춘다.
+ */
+function mergeDisplaySafetyLevel(
+  emergency: SafetyTri,
+  firstVerdict: "가능" | "주의" | "불가" | undefined,
+): SafetyTri {
+  if (emergency === "긴급") return "긴급";
+  if (firstVerdict === "불가") return "긴급";
+  if (emergency === "주의" || firstVerdict === "주의") return "주의";
+  return "안전";
 }
 
 /** 두 좌표 사이 진북 방위각(도) — 선수 방향 표시용 */
@@ -820,6 +839,19 @@ export default function Dashboard() {
   const [trackReportModalOpen, setTrackReportModalOpen] = useState(false);
   const [showTodayTrackReplayOnMap, setShowTodayTrackReplayOnMap] = useState(false);
 
+  const [fieldReportModalOpen, setFieldReportModalOpen] = useState(false);
+  const [fieldReportActive, setFieldReportActive] = useState(false);
+  const [fieldReportExtras, setFieldReportExtras] = useState({ ptyCode: 0, pop: 0, sky: 1 });
+  const [weatherPanelNonce, setWeatherPanelNonce] = useState(0);
+  const weatherRef = useRef(weather);
+  const fieldReportActiveRef = useRef(false);
+  const fieldReportExtrasRef = useRef(fieldReportExtras);
+  weatherRef.current = weather;
+  fieldReportExtrasRef.current = fieldReportExtras;
+  useEffect(() => {
+    fieldReportActiveRef.current = fieldReportActive;
+  }, [fieldReportActive]);
+
   // ── B2G 시연 전용 상태 ────────────────────────────────────────────────────
   const [demoWeatherMode, setDemoWeatherMode] = useState<"normal" | "danger">("normal");
   const [demoAlertVisible, setDemoAlertVisible] = useState(false);
@@ -828,10 +860,51 @@ export default function Dashboard() {
   const [demoSosBlink, setDemoSosBlink] = useState(false); // 선박 마커 깜빡임
 
   const handleForecastScoresChange = useCallback((scores: SlotScore[]) => {
-    setForecastScores(scores);
-    if (scores.length === 0) return;
-    const slot = pickCurrentOrNextKmaSlot(scores.map((s) => s.slot));
-    if (slot) setWeather(kmaSlotToDashboardWeather(slot));
+    setForecastScores((prev) => {
+      if (!fieldReportActiveRef.current || scores.length === 0) return scores;
+      const w = weatherRef.current;
+      const ex = fieldReportExtrasRef.current;
+      const slot = kmaSlotFromFieldReport(
+        {
+          windSpeed: w.windSpeed,
+          windDir: w.windDir,
+          waveHeight: w.waveHeight,
+          temp: w.temp,
+        },
+        { ptyCode: ex.ptyCode, pop: ex.pop, sky: ex.sky },
+      );
+      return [scoreHourSlot(slot), ...scores.slice(1)];
+    });
+    if (!fieldReportActiveRef.current && scores.length > 0) {
+      const slot = pickCurrentOrNextKmaSlot(scores.map((s) => s.slot));
+      if (slot) setWeather(kmaSlotToDashboardWeather(slot));
+    }
+  }, []);
+
+  const handleFieldReportSubmit = useCallback((p: FieldWeatherReportPayload) => {
+    const slot = kmaSlotFromFieldReport(
+      { windSpeed: p.windSpeed, windDir: p.windDir, waveHeight: p.waveHeight, temp: p.temp },
+      { ptyCode: p.ptyCode, pop: p.pop, sky: p.sky },
+    );
+    const ex = { ptyCode: p.ptyCode, pop: p.pop, sky: p.sky };
+    fieldReportExtrasRef.current = ex;
+    setFieldReportExtras(ex);
+    setWeather(kmaSlotToDashboardWeather(slot));
+    fieldReportActiveRef.current = true;
+    setFieldReportActive(true);
+    setForecastScores((prev) => {
+      if (prev.length === 0) return prev;
+      return [scoreHourSlot(slot), ...prev.slice(1)];
+    });
+    setFieldReportModalOpen(false);
+  }, []);
+
+  const handleClearFieldReport = useCallback(() => {
+    fieldReportActiveRef.current = false;
+    setFieldReportActive(false);
+    setFieldReportExtras({ ptyCode: 0, pop: 0, sky: 1 });
+    fieldReportExtrasRef.current = { ptyCode: 0, pop: 0, sky: 1 };
+    setWeatherPanelNonce((n) => n + 1);
   }, []);
 
   const wpIdx        = useRef(0);
@@ -884,9 +957,14 @@ export default function Dashboard() {
     return Date.now() - new Date(last.recorded_at).getTime() < 25 * 60 * 1000;
   }, [lteTrackPoints]);
 
+  const displaySafetyLevel = useMemo(
+    () => mergeDisplaySafetyLevel(safetyLevel, forecastScores[0]?.verdict),
+    [safetyLevel, forecastScores],
+  );
+
   const workLocalRec = useMemo(() => {
     const slot = pickCurrentOrNextKmaSlot(forecastScores.map((s) => s.slot));
-    return buildLocalWorkRecommendation(forecastScores, safetyLevel, weather.windSpeed, weather.waveHeight, {
+    return buildLocalWorkRecommendation(forecastScores, displaySafetyLevel, weather.windSpeed, weather.waveHeight, {
       windGustMps: weather.windGust,
       visibilityKm: weather.visibility,
       tempC: weather.temp,
@@ -895,13 +973,44 @@ export default function Dashboard() {
     });
   }, [
     forecastScores,
-    safetyLevel,
+    displaySafetyLevel,
     weather.windSpeed,
     weather.waveHeight,
     weather.windGust,
     weather.visibility,
     weather.temp,
   ]);
+
+  const nowForecastSlot = useMemo(
+    () =>
+      forecastScores.length > 0
+        ? pickCurrentOrNextKmaSlot(forecastScores.map((s) => s.slot))
+        : null,
+    [forecastScores],
+  );
+
+  const liveWeatherForAi = useMemo(
+    () => ({
+      windSpeed: weather.windSpeed,
+      windDir: weather.windDir,
+      waveHeight: weather.waveHeight,
+      temp: weather.temp,
+      ptyCode: fieldReportActive ? fieldReportExtras.ptyCode : (nowForecastSlot?.ptyCode ?? 0),
+      pop: fieldReportActive ? fieldReportExtras.pop : (nowForecastSlot?.pop ?? 0),
+      sky: fieldReportActive ? fieldReportExtras.sky : (nowForecastSlot?.sky ?? 1),
+    }),
+    [weather, fieldReportActive, fieldReportExtras, nowForecastSlot],
+  );
+
+  const weatherNowcastNote = useMemo(() => {
+    if (fieldReportActive) {
+      return "지금: 현장 상황보고 · 이후: 기상청 단기예보";
+    }
+    if (isKmaApiConfigured()) {
+      return "지금: 단기예보 동기화(주기 갱신, 관측 실시간 아님)";
+    }
+    return "지금: 목업 시연(API 미설정)";
+  }, [fieldReportActive]);
 
   /** 살포 점 Convex Hull 기반 추정 구역 면적 */
   const seedingAreaHa = useMemo(() => {
@@ -1378,6 +1487,8 @@ export default function Dashboard() {
   }, []);
 
   const handleDemoNormal = useCallback(() => {
+    fieldReportActiveRef.current = false;
+    setFieldReportActive(false);
     setDemoWeatherMode("normal");
     setDemoAlertVisible(false);
     setDemoSosBlink(false);
@@ -1395,6 +1506,8 @@ export default function Dashboard() {
   }, [makeDemoScores]);
 
   const handleDemoDanger = useCallback(() => {
+    fieldReportActiveRef.current = false;
+    setFieldReportActive(false);
     setDemoWeatherMode("danger");
     setDemoSafeVisible(false);
     setWeather({
@@ -1612,12 +1725,13 @@ export default function Dashboard() {
     let cancelled = false;
     setWorkAiLoading(true);
     void analyzeWorkPlanBriefWithGroq({
-      safetyLevel,
+      safetyLevel: displaySafetyLevel,
       windMps: weather.windSpeed,
       waveM: weather.waveHeight,
       temp: weather.temp,
       local: workLocalRec,
       userNote: workAiUserNote,
+      nowcastContext: weatherNowcastNote,
     }).then((r) => {
       if (!cancelled && r) setWorkAiGroq(r);
     }).finally(() => {
@@ -1626,7 +1740,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [workAiModalOpen, safetyLevel, weather.windSpeed, weather.waveHeight, weather.temp, workLocalRec, workAiUserNote]);
+  }, [workAiModalOpen, displaySafetyLevel, weather.windSpeed, weather.waveHeight, weather.temp, workLocalRec, workAiUserNote, weatherNowcastNote]);
 
   // 현재 선박 위치 (SOS 토스트 좌표)
   const sosVesselLat = vessel.lat !== 0 ? vessel.lat : 34.8756;
@@ -1674,6 +1788,18 @@ export default function Dashboard() {
         lteTrackPoints={lteTrackPoints}
         vesselName={VESSEL_NAME}
       />
+      <FieldWeatherReportModal
+        open={fieldReportModalOpen}
+        onClose={() => setFieldReportModalOpen(false)}
+        initial={{
+          windSpeed: weather.windSpeed,
+          windDir: weather.windDir,
+          waveHeight: weather.waveHeight,
+          temp: weather.temp,
+        }}
+        initialExtras={fieldReportActive ? fieldReportExtras : undefined}
+        onSubmit={handleFieldReportSubmit}
+      />
 
       {returnCommandModalOpen && (
         <div
@@ -1715,9 +1841,14 @@ export default function Dashboard() {
       )}
 
       {/* ══ WeatherAIPanel — 숨김(로직 전용, 렌더 없음) ═════════════════════ */}
-      <div style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+      <div
+        key={weatherPanelNonce}
+        style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}
+      >
         <WeatherAIPanel
           compact
+          liveWeather={liveWeatherForAi}
+          groqNowcastContext={weatherNowcastNote}
           onSafetyLevelChange={setSafetyLevel}
           onScoresChange={handleForecastScoresChange}
           onGroqSummaryChange={setGroqSummary}
@@ -1831,7 +1962,7 @@ export default function Dashboard() {
         </div>
 
         {(() => {
-          const sc = safetyLevel;
+          const sc = displaySafetyLevel;
           const verdictText = sc === "긴급" ? "즉시 회항 권고" : sc === "주의" ? "기상 주의" : "안전 — 작업 가능";
           const verdictColor = sc === "긴급" ? "#e8c4c4" : sc === "주의" ? "#e8ddaa" : "#9dd4be";
           const barColor = sc === "긴급" ? "#e07070" : sc === "주의" ? "#d4923a" : "#34b8a8";
@@ -1846,23 +1977,51 @@ export default function Dashboard() {
                 <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 pr-1">
                   <span className="shrink-0 text-sm text-slate-400">{sc === "긴급" ? "!" : sc === "주의" ? "△" : "✓"}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                    <p className="inline-flex flex-wrap items-center gap-1 text-[11px] font-medium text-slate-500">
                       <Wind className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                       AI 기상 안전
+                      {fieldReportActive ? (
+                        <span className="rounded bg-amber-500/25 px-1 py-0 text-[9px] font-semibold text-amber-100/95 ring-1 ring-amber-400/30">
+                          현장보고 반영
+                        </span>
+                      ) : null}
                     </p>
                     <p className="truncate text-sm font-medium leading-snug" style={{ color: verdictColor }}>{verdictText}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setWorkAiModalOpen(true)}
-                  title="누르면 금일 작업·안착(해저)·과제형 50% 참고·현장 행동 권고를 봅니다"
-                  className="work-ai-hint-btn group mr-1.5 mt-0.5 -translate-x-1 translate-y-0.5 flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-cyan-400/55 bg-gradient-to-br from-cyan-950/95 via-teal-950/90 to-slate-900/95 text-[9px] font-black leading-none tracking-tight text-cyan-50 shadow-sm transition-all hover:border-cyan-300/70 hover:from-cyan-900/95 hover:via-teal-900/92 active:scale-95"
-                  aria-label="AI 금일 작업 보조 요약 열기"
-                >
-                  <Sparkles className="mb-0.5 h-2.5 w-2.5 text-cyan-200/95 group-hover:text-cyan-100" aria-hidden />
-                  AI
-                </button>
+                <div className="mr-1.5 mt-0.5 flex shrink-0 -translate-x-1 translate-y-0.5 flex-col items-end gap-0.5">
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFieldReportModalOpen(true)}
+                      title="함정·관제에서 확인한 풍속·파고 등을 넣으면 지금 구간 판정에 반영됩니다"
+                      className="flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-teal-500/40 bg-teal-950/50 text-[8px] font-bold leading-none text-teal-100/95 shadow-sm transition-colors hover:border-teal-300/55 hover:bg-teal-900/55 active:scale-95"
+                      aria-label="현장 상황보고 입력"
+                    >
+                      <ClipboardList className="mb-0.5 h-2.5 w-2.5 text-teal-200/90" aria-hidden />
+                      보고
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorkAiModalOpen(true)}
+                      title="누르면 금일 작업·안착(해저)·과제형 50% 참고·현장 행동 권고를 봅니다"
+                      className="work-ai-hint-btn group flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg border border-cyan-400/55 bg-gradient-to-br from-cyan-950/95 via-teal-950/90 to-slate-900/95 text-[9px] font-black leading-none tracking-tight text-cyan-50 shadow-sm transition-all hover:border-cyan-300/70 hover:from-cyan-900/95 hover:via-teal-900/92 active:scale-95"
+                      aria-label="AI 금일 작업 보조 요약 열기"
+                    >
+                      <Sparkles className="mb-0.5 h-2.5 w-2.5 text-cyan-200/95 group-hover:text-cyan-100" aria-hidden />
+                      AI
+                    </button>
+                  </div>
+                  {fieldReportActive ? (
+                    <button
+                      type="button"
+                      onClick={handleClearFieldReport}
+                      className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-slate-400 underline decoration-slate-500/50 underline-offset-2 hover:text-teal-200/90"
+                    >
+                      예보 자동 복귀
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="border-t border-white/[0.05] px-3 py-2" style={{ background: SIDEBAR_SECTION_TINT }}>
                 <div className="flex items-start gap-2">
@@ -1898,10 +2057,13 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <p className="mt-1.5 border-t border-white/[0.06] pt-1.5 text-[10px] leading-snug text-violet-100/88">
+                <div className="mt-1.5 border-t border-white/[0.06] pt-1.5 space-y-1">
+                  <p className="text-[9px] leading-snug text-slate-500/95">{weatherNowcastNote}</p>
+                  <p className="text-[10px] leading-snug text-violet-100/88">
                   <span className="font-semibold text-violet-300/95">AI · 해저 안착(추정)</span>{" "}
                   {workLocalRec.attachmentTickerCue} — 살포 성공(통신)과는 별개 지표입니다.
                 </p>
+                </div>
               </div>
             </div>
           );
@@ -2303,8 +2465,8 @@ export default function Dashboard() {
           >
             <Wind className="w-3.5 h-3.5 text-cyan-300" />
             <span className="text-white/50">{windDirLabel(weather.windDir)}</span>
-            <span className="font-mono text-cyan-300 font-semibold">{weather.windSpeed.toFixed(1)} kt</span>
-            {weather.windSpeed > 16 && (
+            <span className="font-mono text-cyan-300 font-semibold">{mpsToKt(weather.windSpeed).toFixed(1)} kt</span>
+            {mpsToKt(weather.windSpeed) > 16 && (
               <span className="text-amber-400 text-[10px] font-bold animate-pulse ml-0.5">⚠</span>
             )}
           </div>
@@ -2337,7 +2499,7 @@ export default function Dashboard() {
         </header>
 
         <AiTicker
-          safetyLevel={safetyLevel}
+          safetyLevel={displaySafetyLevel}
           groqSummary={groqSummary}
           aiMsg={aiEmergencyMsg ?? ""}
           windSpeed={weather.windSpeed}
@@ -2430,7 +2592,8 @@ export default function Dashboard() {
           {forecastScores.length > 0 && (
             <WeatherTimelineTracker
               scores={forecastScores}
-              safetyLevel={safetyLevel}
+              safetyLevel={displaySafetyLevel}
+              subtitle={weatherNowcastNote}
             />
           )}
 

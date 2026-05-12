@@ -63,6 +63,6 @@
   "excludePastDeadline": true,
   "dropUnparsedDeadline": false,
   "outputDir": "artifacts/grant-watch",
-  "docsOutputPath": "docs/지원사업/99_공고-모니터링-최근결과.md",
+  "docsOutputPath": "docs/사업-공고/99_공고-모니터링-최근결과.md",
   "ddayAlerts": [14, 7, 3, 1, 0]
 }
