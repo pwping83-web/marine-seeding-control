@@ -26,6 +26,9 @@ scripts/.growth-advisor-state.json
 # 지식재산·조달 로컬 메모(민감정보 — 예시만 커밋)
 docs/납품-IP-전략/개인정보-로컬메모.md
 
+# 특허 출원·가출원 로컬 메모(출원번호 등 — 예시만 커밋)
+docs/특허/가출원-준비/가출원-로컬메모.md
+
 # Logs
 logs/
 *.log

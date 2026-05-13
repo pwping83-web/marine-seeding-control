@@ -4,7 +4,7 @@
  * AI 기반 종자 살포 계획 엔진
  *  · 기상 조건 → 일일 살포 한도 산출
  *  · 해역 격자 점수화 (수심·수온·해류 시뮬레이션 포함)
- *  · A* 알고리즘으로 회피 경로 계산 (암초·보호구역 장애물 처리)
+ *  · A* 알고리즘으로 회피 경로 계산 (암초·보호구역 장애물 처리 + 선택적 기상 가중 스텝 비용)
  *  · Arduino PID 속도 제어 파라미터 제안
  *
  * 외부 API가 없는 항목(수심·수온·해류)은
@@ -315,6 +315,47 @@ function isObstructed(p: LatLng): boolean {
   return KNOWN_OBSTACLES.some((obs) => haversineKm(p, obs) < obs.radiusKm);
 }
 
+/** 북=0°, 시계방향(0~360) — cur→nb 최초 방위각 */
+function initialBearingDeg(cur: LatLng, nb: LatLng): number {
+  const φ1 = (cur.lat * Math.PI) / 180;
+  const φ2 = (nb.lat * Math.PI) / 180;
+  const Δλ = ((nb.lng - cur.lng) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+}
+
+/** 두 방위각(도) 사이의 최소 각도차 (0~180) */
+function angularDiffDeg(a: number, b: number): number {
+  let d = Math.abs(a - b) % 360;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+/**
+ * 격자 한 스텝(cur→nb)의 기상 비용 배수(≥1).
+ * `WeatherInput.windDir`는 기상청 단기와 동일하게 **풍향(바람이 오는 방향, °)** 으로 해석하고,
+ * 이동 방향이 바람이 **밀어 주는 방향**과 반대(역풍)일수록 비용을 키운다.
+ * 파고·시정은 경로 선택에 거의 영향을 주지 않도록 두고(전역 상수 배수는 최단 경로 순서를 바꾸지 못함), 풍속·돌풍만 사용한다.
+ */
+export function weatherStepCostMultiplier(cur: LatLng, nb: LatLng, wx: WeatherInput): number {
+  const stepKm = haversineKm(cur, nb);
+  if (stepKm < 1e-9) return 1;
+
+  const br = initialBearingDeg(cur, nb);
+  const windTowardDeg = (wx.windDir + 180) % 360;
+  const alignDeg = angularDiffDeg(br, windTowardDeg);
+  const withWind = Math.cos((alignDeg * Math.PI) / 180);
+  const into = Math.max(0, -withWind);
+
+  const w = Math.max(0, wx.windSpeed);
+  const gustExtra = Math.max(0, wx.windGust - w);
+  const penalty = (0.1 * w + 0.05 * gustExtra) * into;
+
+  return Math.min(2.8, 1 + penalty);
+}
+
 interface AStarNode {
   lat: number; lng: number;
   g: number; h: number; f: number;
@@ -325,8 +366,9 @@ interface AStarNode {
  * A* 경로 탐색
  * - 격자 해상도: 약 0.01° (≈1.1km)
  * - 장애물 반경 이내 셀은 탐색 불가
+ * - `wx`가 있으면 각 스텝 비용에 `weatherStepCostMultiplier`(역풍·강풍 반영)를 곱한다. 생략 시 거리만 사용(기존 동작).
  */
-export function findAStarRoute(start: LatLng, goal: LatLng): RouteResult {
+export function findAStarRoute(start: LatLng, goal: LatLng, wx?: WeatherInput | null): RouteResult {
   const STEP = 0.012; // 격자 간격(°)
   const snap = (v: number) => Math.round(v / STEP) * STEP;
 
@@ -364,7 +406,9 @@ export function findAStarRoute(start: LatLng, goal: LatLng): RouteResult {
       const nbKey = key(nb);
       if (closed.has(nbKey)) continue;
       if (isObstructed(nb)) { closed.add(nbKey); continue; }
-      const stepCost = haversineKm(cur, nb);
+      const geoKm = haversineKm(cur, nb);
+      const mult = wx ? weatherStepCostMultiplier(cur, nb, wx) : 1;
+      const stepCost = geoKm * mult;
       const gNew = cur.g + stepCost;
       const existing = open.get(nbKey);
       if (existing && existing.g <= gNew) continue;

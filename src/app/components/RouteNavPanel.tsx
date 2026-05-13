@@ -58,12 +58,12 @@ export function RouteNavPanel({
     setCalc(true);
     setTimeout(() => {
       try {
-        const r = findAStarRoute(vesselPos, { lat, lng });
+        const r = findAStarRoute(vesselPos, { lat, lng }, weather);
         setRoute(r);
         onRouteChange(r.waypoints.map((w) => [w.lat, w.lng]), [lat, lng]);
       } finally { setCalc(false); }
     }, 80);
-  }, [destLat, destLng, vesselPos, onRouteChange]);
+  }, [destLat, destLng, vesselPos, weather, onRouteChange]);
 
   const clearRoute = useCallback(() => {
     setRoute(null);

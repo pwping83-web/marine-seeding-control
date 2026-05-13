@@ -23,20 +23,20 @@ export function dropAgeBand(recordedAt: number, now: number = Date.now()): DropA
   return "pale";
 }
 
-/** 시뮬·구역 일반 살포점 (기존 붉은 계열, 연령 단계) */
+/** 시뮬·구역 일반 살포점 — 연령 밴드별 색상 (특허 도면 fig04 팔레트: 초록→노랑→주황→회색) */
 export function dropAgeColors(band: DropAgeBand): { fill: string; stroke: string; pulse: string } {
   switch (band) {
     case "recent":
-      return { fill: "#7f1d1d", stroke: "#fecaca", pulse: "#f87171" };
+      return { fill: "#16a34a", stroke: "#bbf7d0", pulse: "#4ade80" };   // 초록 — 0~45일
     case "orange3m":
-      return { fill: "#c2410c", stroke: "#fdba74", pulse: "#fb923c" };
+      return { fill: "#ca8a04", stroke: "#fef9c3", pulse: "#facc15" };   // 노랑 — 46~120일
     case "pink1y":
-      return { fill: "#be185d", stroke: "#fbcfe8", pulse: "#f472b6" };
+      return { fill: "#ea580c", stroke: "#ffedd5", pulse: "#fb923c" };   // 주황 — 121~400일
     case "light2y":
-      return { fill: "#fda4af", stroke: "#fff1f2", pulse: "#fb7185" };
+      return { fill: "#64748b", stroke: "#e2e8f0", pulse: "#94a3b8" };   // 연회색 — 401~800일
     case "pale":
     default:
-      return { fill: "#cbd5e1", stroke: "#f8fafc", pulse: "#94a3b8" };
+      return { fill: "#334155", stroke: "#cbd5e1", pulse: "#64748b" };   // 진회색 — 800일+
   }
 }
 

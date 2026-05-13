@@ -111,11 +111,11 @@ export function SeedingPlanPanel({ weather, vesselPos, onZoneSelect, onRouteCalc
   const handleZoneSelect = useCallback((zone: SeaZone) => {
     setSelectedZone(zone);
     onZoneSelect?.(zone);
-    const result = findAStarRoute(vesselPos, { lat: zone.lat, lng: zone.lng });
+    const result = findAStarRoute(vesselPos, { lat: zone.lat, lng: zone.lng }, weather);
     setRoute(result);
     onRouteCalc?.(result);
     setOpenRoute(true);
-  }, [vesselPos, onZoneSelect, onRouteCalc]);
+  }, [vesselPos, weather, onZoneSelect, onRouteCalc]);
 
   const copyPid = () => {
     navigator.clipboard.writeText(pidCode).then(() => {

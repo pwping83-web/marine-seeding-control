@@ -102,6 +102,8 @@ type Props = {
   };
   /** 살포 예정(계획)만 지도 클릭으로 추가 */
   seedPlanMapEditor?: null | { onMapClick: (lat: number, lng: number) => void };
+  /** 실시간 공유 선박 위치 (Supabase vessel_positions) — 주황 원 마커로 표시 */
+  remoteVessels?: { id: string; lat: number; lng: number; heading: number; label?: string }[];
   /** 경로를 따라 미리 찍은 살포 예정점 */
   plannedSeedMarkers?: [number, number][];
 };
@@ -450,6 +452,7 @@ export function MarineLeafletMap({
   replayTrackVertexEditor = null,
   seedPlanMapEditor = null,
   plannedSeedMarkers = [],
+  remoteVessels = [],
 }: Props) {
   const planned = plannedSeedMarkers ?? [];
   const fitPoints = useMemo(() => {
@@ -708,6 +711,35 @@ export function MarineLeafletMap({
           seedingActive={vesselSeedingActive}
         />
       )}
+
+      {/* 실시간 공유 선박 — Supabase vessel_positions */}
+      {remoteVessels.map((rv) => (
+        <CircleMarker
+          key={`rv-${rv.id}`}
+          center={[rv.lat, rv.lng]}
+          radius={9}
+          pathOptions={{
+            color: "#f97316",
+            fillColor: "#fb923c",
+            fillOpacity: 0.92,
+            weight: 2,
+          }}
+        >
+          <Popup>
+            <span style={{ fontWeight: 700, color: "#f97316" }}>
+              🚢 {rv.label ?? rv.id}
+            </span>
+            <br />
+            {rv.lat.toFixed(5)}°N, {rv.lng.toFixed(5)}°E
+          </Popup>
+          <Tooltip permanent direction="top" offset={[0, -12]} opacity={0.92}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#f97316" }}>
+              {rv.label ?? rv.id}
+            </span>
+          </Tooltip>
+        </CircleMarker>
+      ))}
+
       {replayTrackVertexEditor
         ? replayTrackVertexEditor.vertices.map(([la, ln], i) => (
             <WaypointEditorMarker

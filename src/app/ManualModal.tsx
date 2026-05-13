@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X, Phone, Building2, ChevronDown, ChevronRight,
-  Map, Wind, Ship, Download, AlertCircle, BookOpen,
+  Map, Wind, Ship, Download, AlertCircle, BookOpen, Printer,
 } from "lucide-react";
 
 // ─── Contact info ─────────────────────────────────────────────────────────────
@@ -237,6 +237,9 @@ const SECTIONS: {
   },
 ];
 
+/** 인쇄 시 모든 아코디언을 펼침 */
+const PRINT_EXPAND_ALL = "__print_expand_all__";
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function Section({
@@ -294,20 +297,35 @@ export default function ManualModal({
   onClose: () => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>("overview");
+  const expandedBeforePrintRef = useRef<string | null>("overview");
+
+  useEffect(() => {
+    const restore = () => {
+      setExpanded(expandedBeforePrintRef.current);
+    };
+    window.addEventListener("afterprint", restore);
+    return () => window.removeEventListener("afterprint", restore);
+  }, []);
 
   if (!isOpen) return null;
+
+  function handlePdfPrint() {
+    expandedBeforePrintRef.current = expanded;
+    setExpanded(PRINT_EXPAND_ALL);
+    setTimeout(() => window.print(), 80);
+  }
 
   return (
     <div className="fixed inset-0 z-[999] flex" style={{ fontFamily: "sans-serif" }}>
       {/* Backdrop */}
       <div
-        className="flex-1 bg-black/60 backdrop-blur-sm"
+        className="print-hide flex-1 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Drawer panel */}
       <div
-        className="w-full max-w-[480px] h-full flex flex-col overflow-hidden shadow-2xl"
+        className="print-manual-modal w-full max-w-[480px] h-full flex flex-col overflow-hidden shadow-2xl"
         style={{
           background: "linear-gradient(180deg, #0c2748 0%, #081b34 100%)",
           borderLeft: "1px solid rgba(64,224,208,0.15)",
@@ -338,8 +356,10 @@ export default function ManualModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all"
+            className="print-hide w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all"
+            aria-label="닫기"
           >
             <X className="w-4 h-4" />
           </button>
@@ -412,8 +432,13 @@ export default function ManualModal({
             <Section
               key={sec.id}
               sec={sec}
-              isOpen={expanded === sec.id}
-              onToggle={() => setExpanded(expanded === sec.id ? null : sec.id)}
+              isOpen={expanded === PRINT_EXPAND_ALL || expanded === sec.id}
+              onToggle={() =>
+                setExpanded((prev) => {
+                  if (prev === PRINT_EXPAND_ALL) return sec.id;
+                  return prev === sec.id ? null : sec.id;
+                })
+              }
             />
           ))}
 
@@ -428,6 +453,30 @@ export default function ManualModal({
               사업자등록번호 {BIZ_NO} · v1.5 · 2026
             </p>
           </div>
+        </div>
+
+        <div
+          className="print-hide shrink-0 border-t px-4 py-2.5"
+          style={{
+            borderColor: "rgba(64,224,208,0.12)",
+            background: "rgba(0,0,0,0.18)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={handlePdfPrint}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold text-teal-100 transition-colors hover:bg-teal-900/30"
+            style={{
+              borderColor: "rgba(45,212,191,0.35)",
+              background: "rgba(45,212,191,0.08)",
+            }}
+          >
+            <Printer className="h-4 w-4 shrink-0" aria-hidden />
+            PDF 출력
+          </button>
+          <p className="mt-1.5 text-center text-[10px] text-white/30">
+            인쇄 대화상자에서 「PDF로 저장」을 선택하면 매뉴얼 파일을 만들 수 있습니다.
+          </p>
         </div>
       </div>
     </div>

@@ -8,6 +8,9 @@ export type ClientAccessGeo = {
   /** ipwho.is 행정구역 코드 (예: 41=경기) */
   region_code: string | null;
   city: string | null;
+  /** ipwho.is 대략 좌표 (이메일 알림 등에 사용) */
+  latitude: number | null;
+  longitude: number | null;
 };
 
 /** 브라우저에서 공인 IP·대략 위치(ipwho.is) 조회 */
@@ -18,6 +21,8 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
   let region: string | null = null;
   let region_code: string | null = null;
   let city: string | null = null;
+  let latitude: number | null = null;
+  let longitude: number | null = null;
 
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 8000);
@@ -41,6 +46,8 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
           region?: unknown;
           region_code?: unknown;
           city?: unknown;
+          latitude?: unknown;
+          longitude?: unknown;
         };
         if (g.success === true) {
           country = typeof g.country === "string" ? g.country : null;
@@ -51,6 +58,12 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
               ? String(g.region_code)
               : null;
           city = typeof g.city === "string" ? g.city : null;
+          const lat = g.latitude;
+          const lng = g.longitude;
+          latitude =
+            typeof lat === "number" && Number.isFinite(lat) ? lat : null;
+          longitude =
+            typeof lng === "number" && Number.isFinite(lng) ? lng : null;
         }
       } catch {
         /* 위치 API 실패 시 IP만 */
@@ -62,7 +75,7 @@ export async function fetchClientAccessGeo(): Promise<ClientAccessGeo> {
     clearTimeout(timer);
   }
 
-  return { ip, country, countryCode, region, region_code, city };
+  return { ip, country, countryCode, region, region_code, city, latitude, longitude };
 }
 
 export function formatAccessTimeKorea(): string {
@@ -77,6 +90,16 @@ export function geoToAccessLocationLine(
   geo: ClientAccessGeo,
   opts?: { forEmail?: boolean },
 ): string {
+  if (opts?.forEmail === true) {
+    const { latitude: lat, longitude: lng, ip } = geo;
+    if (lat != null && lng != null) {
+      return `위도 ${lat.toFixed(5)}, 경도 ${lng.toFixed(5)}`;
+    }
+    if (ip) {
+      return `좌표 미수신 (IP: ${ip})`;
+    }
+    return "좌표·IP 미수신";
+  }
   return formatAccessLocationForDisplay({
     country: geo.country,
     countryCode: geo.countryCode,
@@ -84,6 +107,6 @@ export function geoToAccessLocationLine(
     region_code: geo.region_code,
     city: geo.city,
     ip: geo.ip ?? undefined,
-    omitIp: opts?.forEmail === true,
+    omitIp: false,
   });
 }

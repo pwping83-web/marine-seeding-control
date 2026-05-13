@@ -63,6 +63,15 @@ import {
   type VesselTrackPoint,
 } from "@/lib/marine-db";
 import { OFFLINE_MAP_NO_TILES } from "@/lib/local-recording-mode";
+import {
+  VESSEL_ID,
+  VESSEL_USER_EMAIL,
+  subscribeVesselPositions,
+  upsertVesselPosition,
+  removeVesselPosition,
+  type VesselPositionRow,
+} from "@/lib/vessel-position-db";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { WeatherAIPanel } from "./components/WeatherAIPanel";
 import { FieldWeatherReportModal, type FieldWeatherReportPayload } from "./components/FieldWeatherReportModal";
 import { EmergencyPanel } from "./components/EmergencyPanel";
@@ -313,19 +322,20 @@ function parseCsvToDrops(csv: string): SeedDrop[] {
 }
 
 /** 화면 좌표 루프 — 지도 중심(470,260) 부근에 몰아 남해 시연 구역만 최대 확대되게 함 */
+// 거제도 남쪽 공해 구역 — y 365-445 대역(위도 약 34.60~34.65) 은 육지 없는 해상
 const WAYPOINTS = [
-  { x: 400, y: 285 },
-  { x: 435, y: 268 },
-  { x: 475, y: 275 },
-  { x: 515, y: 262 },
-  { x: 545, y: 278 },
-  { x: 530, y: 298 },
-  { x: 505, y: 312 },
-  { x: 455, y: 308 },
-  { x: 420, y: 292 },
-  { x: 448, y: 278 },
-  { x: 488, y: 270 },
-  { x: 462, y: 288 },
+  { x: 290, y: 390 },
+  { x: 370, y: 368 },
+  { x: 455, y: 395 },
+  { x: 535, y: 370 },
+  { x: 615, y: 398 },
+  { x: 695, y: 372 },
+  { x: 765, y: 402 },
+  { x: 810, y: 378 },
+  { x: 780, y: 430 },
+  { x: 670, y: 445 },
+  { x: 530, y: 438 },
+  { x: 385, y: 418 },
 ];
 
 const WIND_ARROW_POS = [
@@ -350,6 +360,18 @@ const SHIP_COMMANDS = [
 
 function fmt(d: Date) {
   return d.toLocaleTimeString("ko-KR", { hour12: false });
+}
+
+/** 데모 살포점 이력 표시용 — 오래된 데이터는 날짜 포함 */
+function fmtDropTime(recordedAt: number): string {
+  const d = new Date(recordedAt);
+  const diffDays = (Date.now() - recordedAt) / 86_400_000;
+  if (diffDays < 1) return d.toLocaleTimeString("ko-KR", { hour12: false });
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  if (diffDays >= 365) return `${yyyy}.${mm}.${dd}`;
+  return `${mm}-${dd}`;
 }
 
 function xyToLatLng(x: number, y: number): { lat: number; lng: number } {
@@ -518,20 +540,22 @@ function sidebarHistoryRowAccent(d: SeedDrop, isLatest: boolean): string {
   return "rgba(45, 212, 191, 0.55)";
 }
 
-const INITIAL_SEED_COUNT = 4;
+const INITIAL_SEED_COUNT = 11;
 /** 사이드바 금일·누적 표시용 기준값(과거 UI와 동일 톤) */
 const DAILY_SEED_DISPLAY_BASE = 124;
 const CUMULATIVE_SEED_BASE = 1840;
 function mpsToKt(mps: number) {
   return mps * 1.94384;
 }
-const SEED_AGE_DAYS = [820, 420, 95, 3];
+/** 연령 밴드별 2~3개씩 — pale(진회색)·light2y(연회색)·pink1y(주황)·orange3m(노랑)·recent(초록) */
+const SEED_AGE_DAYS = [910, 860, 550, 450, 280, 200, 140, 95, 60, 20, 3];
 
 // 초기 구역별 카운터 — seedInitial 이후 Dashboard 에서 동기화
 const INIT_ZONE_COUNTS: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
 
 function seedInitial(): SeedDrop[] {
   const counts: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
+  // WAYPOINTS[0..INITIAL_SEED_COUNT-1] 사용 (WAYPOINTS[11]은 감사 전용으로 예약)
   const pts = WAYPOINTS.slice(0, INITIAL_SEED_COUNT);
   const base = pts.map((p, i) => {
     const coords = xyToLatLng(p.x, p.y);
@@ -541,23 +565,23 @@ function seedInitial(): SeedDrop[] {
     return {
       id: String(1000 + i + 1).padStart(4, "0"),
       label: makeLabel(zone, counts[zone]),
-      time: fmt(new Date(recordedAt)),
+      time: fmtDropTime(recordedAt),
       lat: coords.lat + (Math.random() - 0.5) * 0.0003,
       lng: coords.lng + (Math.random() - 0.5) * 0.0003,
       status: "성공" as const,
       recordedAt,
     };
   });
-  // 검수 불일치 시연용 살포점
-  const pAudit = WAYPOINTS[5];
+  // 검수 불일치 시연용 살포점 — WAYPOINTS[11](예약된 마지막 포인트)
+  const pAudit = WAYPOINTS[11];
   const coordsAudit = xyToLatLng(pAudit.x, pAudit.y);
   const recordedAtAudit = Date.now() - 12 * 86_400_000;
   const zoneAudit = getZone(pAudit.x);
   counts[zoneAudit]++;
   const auditDrop: SeedDrop = {
-    id: "1005",
+    id: String(1000 + INITIAL_SEED_COUNT + 1).padStart(4, "0"),
     label: makeLabel(zoneAudit, counts[zoneAudit]),
-    time: fmt(new Date(recordedAtAudit)),
+    time: fmtDropTime(recordedAtAudit),
     lat: coordsAudit.lat + (Math.random() - 0.5) * 0.0003,
     lng: coordsAudit.lng + (Math.random() - 0.5) * 0.0003,
     status: "성공",
@@ -852,6 +876,11 @@ export default function Dashboard() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const geoWatchRef = useRef(0);
   const hadGpsFixForFitRef = useRef(false);
+
+  // ── 실시간 선박 공유 (Supabase vessel_positions) ────────────────────────────
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [remoteVessels, setRemoteVessels] = useState<VesselPositionRow[]>([]);
+  const isVesselUser = currentUserEmail === VESSEL_USER_EMAIL;
   const [lteFollowEnabled, setLteFollowEnabled] = useState(false);
   const [lteTrackPoints, setLteTrackPoints] = useState<VesselTrackPoint[]>([]);
   const [aiEmergencyMsg, setAiEmergencyMsg] = useState<string | undefined>(undefined);
@@ -1356,6 +1385,47 @@ export default function Dashboard() {
       hadGpsFixForFitRef.current = false;
     }
   }, [mapMode, gpsVessel]);
+
+  // ── 로그인 사용자 이메일 조회 ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    void getSupabase()
+      .auth.getUser()
+      .then(({ data }) => {
+        setCurrentUserEmail(data.user?.email ?? null);
+      });
+  }, []);
+
+  // ── vessel user: GPS→Supabase 발행 (실제 모드 진입 시) ─────────────────────
+  useEffect(() => {
+    if (!isVesselUser || !isSupabaseConfigured()) return;
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        void upsertVesselPosition(
+          VESSEL_ID,
+          VESSEL_USER_EMAIL,
+          pos.coords.latitude,
+          pos.coords.longitude,
+          pos.coords.heading ?? 0,
+          pos.coords.speed != null ? pos.coords.speed * 1.944 : 0,
+        );
+      },
+      (err) => console.warn("[vessel-pos] GPS 오류:", err.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15_000 },
+    );
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      void removeVesselPosition(VESSEL_ID);
+    };
+  }, [isVesselUser]);
+
+  // ── 모든 사용자: Supabase realtime 구독 → 원격 선박 마커 ───────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const unsub = subscribeVesselPositions(setRemoteVessels);
+    return unsub;
+  }, []);
 
   /** 테스트 살포 라벨 순번 — GNSS 모드를 끄면 다음 실시간 진입 시 01부터 다시 매김 */
   useEffect(() => {
@@ -2630,7 +2700,7 @@ export default function Dashboard() {
         })()}
 
         {/* 선박 위치 */}
-        <div className="shrink-0 border-b border-white/[0.06] px-3 py-2" style={{ background: SIDEBAR_SECTION_TINT }}>
+        <div className="shrink-0 border-b border-white/[0.06] px-3 py-1.5" style={{ background: SIDEBAR_SECTION_TINT }}>
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium text-slate-300 inline-flex items-center gap-1.5">
               <Crosshair className="w-3.5 h-3.5 text-teal-400/55 shrink-0" aria-hidden />
@@ -2704,7 +2774,7 @@ export default function Dashboard() {
         </div>
 
         <div
-          className="shrink-0 border-b border-white/[0.06] px-3 py-2"
+          className="shrink-0 border-b border-white/[0.06] px-3 py-1.5"
           style={{ background: SIDEBAR_SECTION_TINT }}
         >
           <div className="flex items-center gap-2">
@@ -2785,7 +2855,7 @@ export default function Dashboard() {
             )}
           </div>
           <div
-            className="grid grid-cols-2 gap-1.5 border-t border-white/[0.05] px-3 py-2"
+            className="grid grid-cols-2 gap-1 border-t border-white/[0.05] px-3 py-1.5"
             style={{ background: "rgba(8, 27, 52, 0.48)" }}
           >
             {(
@@ -2864,7 +2934,7 @@ export default function Dashboard() {
                   (signalSending && b.cmd !== "seed_start" && b.cmd !== "seed_stop") ||
                   (b.cmd === "report_position" && posReportDisabled)
                 }
-                className={`flex min-h-[2.5rem] items-center justify-center gap-1 rounded-md border border-solid px-1.5 py-1.5 transition-[filter,transform] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/15 active:scale-[0.98] disabled:opacity-40 ${
+                className={`flex min-h-[2rem] items-center justify-center gap-1 rounded-md border border-solid px-1.5 py-1 transition-[filter,transform] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/15 active:scale-[0.98] disabled:opacity-40 ${
                   b.cmd === "seed_start" && seedingActive ? "seeding-start-btn-active ring-2 ring-emerald-500/35" : ""
                 }`}
                 style={{
@@ -2883,7 +2953,7 @@ export default function Dashboard() {
             })}
           </div>
           <div
-            className="flex items-center gap-2 border-t border-white/[0.05] px-3 py-2"
+            className="flex items-center gap-2 border-t border-white/[0.05] px-3 py-1.5"
             style={{ background: "rgba(12, 39, 72, 0.35)" }}
             role="status"
             aria-live="polite"
@@ -2918,7 +2988,7 @@ export default function Dashboard() {
               )}
             </p>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col border-t border-white/[0.05] px-3 pb-2 pt-2" style={{ background: "rgba(8, 27, 52, 0.35)" }}>
+          <div className="marine-sidebar-history-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-t border-white/[0.05] px-3 pb-2 pt-2" style={{ background: "rgba(8, 27, 52, 0.35)" }}>
             <div className="grid shrink-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] items-center gap-1 pb-1 pl-[11px] pr-1 text-[10px] font-medium text-teal-200/55">
               <span>번호</span>
               <span>시각</span>
@@ -2928,7 +2998,7 @@ export default function Dashboard() {
             </div>
             <div
               ref={logRef}
-              className="marine-sidebar-history-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-0.5"
+              className="flex shrink-0 flex-col gap-1 pr-0.5"
             >
               {filteredDrops.length === 0 ? (
                 <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-teal-200/45">
@@ -2990,24 +3060,108 @@ export default function Dashboard() {
               )}
             </div>
             <div
-              className="mt-2 shrink-0 space-y-1.5 rounded-lg border px-2 py-2 pt-2.5"
+              className="mt-2 shrink-0 rounded-lg border px-2 pb-2 pt-2"
               style={{
                 background: SIDEBAR_HISTORY_FOOTER_BG,
                 borderColor: "rgba(64,224,208,0.2)",
               }}
             >
+              {/* ① CSV 불러오기·저장 + 날짜 범위 — 항상 보이는 최상단 */}
+              <input ref={fileImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} aria-hidden />
+              <div className="flex items-center gap-1.5">
+                {/* 시작일 아이콘 버튼 — 투명 date input 오버레이 */}
+                <div
+                  className="relative flex min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md py-1.5"
+                  style={{ background: "rgba(12,39,72,0.75)", border: "1px solid rgba(64,224,208,0.22)" }}
+                >
+                  <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-300/80" aria-hidden />
+                  <span className="text-[9px] font-medium leading-none text-cyan-100/80">
+                    {filterStart ? filterStart.slice(5).replace("-", ".") : "시작일"}
+                  </span>
+                  <input
+                    type="date"
+                    value={filterStart}
+                    onChange={(e) => setFilterStart(e.target.value)}
+                    className="absolute inset-0 w-full cursor-pointer opacity-0 [color-scheme:dark]"
+                    aria-label="시작일"
+                  />
+                </div>
+                <span className="shrink-0 text-xs font-medium text-teal-200/55">~</span>
+                {/* 종료일 아이콘 버튼 */}
+                <div
+                  className="relative flex min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md py-1.5"
+                  style={{ background: "rgba(12,39,72,0.75)", border: "1px solid rgba(64,224,208,0.22)" }}
+                >
+                  <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-300/80" aria-hidden />
+                  <span className="text-[9px] font-medium leading-none text-cyan-100/80">
+                    {filterEnd ? filterEnd.slice(5).replace("-", ".") : "종료일"}
+                  </span>
+                  <input
+                    type="date"
+                    value={filterEnd}
+                    onChange={(e) => setFilterEnd(e.target.value)}
+                    className="absolute inset-0 w-full cursor-pointer opacity-0 [color-scheme:dark]"
+                    aria-label="종료일"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileImportRef.current?.click()}
+                  title="CSV 불러오기"
+                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-teal-100/90 transition-[background,color] hover:bg-teal-400/15 hover:text-cyan-50"
+                  style={{
+                    background: "rgba(64,224,208,0.08)",
+                    border: "1px solid rgba(64,224,208,0.22)",
+                  }}
+                >
+                  <Upload className="h-3.5 w-3.5 text-teal-200/90" aria-hidden />
+                  <span className="text-[9px] font-medium leading-none">불러오기</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportCSV(filteredDrops)}
+                  title={`CSV 저장 (${filteredDrops.length}건)`}
+                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 font-bold text-cyan-50 transition-[background,filter] hover:brightness-110"
+                  style={{
+                    background: "rgba(45,212,191,0.18)",
+                    border: "1px solid rgba(94,234,212,0.45)",
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.12) inset",
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5 text-teal-100" aria-hidden />
+                  <span className="text-[9px] font-bold leading-none">CSV</span>
+                </button>
+              </div>
+
+              {/* ② 전체 초기화 — 항상 보이는 두 번째 */}
+              <button
+                type="button"
+                disabled={fullResetBusy}
+                onClick={() => void handleFullReset()}
+                title="살포 이력·필터·선박 신호·살포 진행·지도 모드를 초기화하고 작업 예약을 기본 일정으로 되돌립니다"
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[11px] font-bold text-amber-100/95 transition-[background,opacity] hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-45"
+                style={{
+                  background: "rgba(251,191,36,0.12)",
+                  border: "1px solid rgba(251,191,36,0.35)",
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                전체 초기화
+              </button>
+              {(filterStart || filterEnd) && (
+                <p className="mt-1 text-center text-[10px] text-teal-200/50">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
+              )}
+
+              {/* ③ 월·일별 지도 — 아래에 배치, 높이 초과 시 내부 스크롤 */}
               <div
-                className="rounded-md border border-teal-500/12 px-1.5 py-1.5"
+                className="mt-1.5 rounded-md border border-teal-500/12 px-1.5 py-1.5"
                 style={{ background: "rgba(12, 39, 72, 0.4)" }}
               >
                 <p className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold text-teal-200/90">
                   <Calendar className="h-3 w-3 shrink-0 text-teal-400/90" aria-hidden />
                   월·일별 지도
                 </p>
-                <p className="mb-1.5 text-[9px] leading-snug text-slate-400">
-                  월을 누르면 그달 살포 점만 지도에 남고, 같은 달이면 날짜를 골라 하루만 볼 수 있습니다.
-                </p>
-                <div className="mb-1.5 flex flex-wrap gap-1">
+                <div className="mb-1 flex flex-wrap gap-1 pr-0.5">
                   <button
                     type="button"
                     onClick={clearDropDateFilter}
@@ -3028,13 +3182,13 @@ export default function Dashboard() {
                         type="button"
                         onClick={() => applyDropMonthFilter(s.year, s.month)}
                         title={`${s.year}년 ${s.month}월 살포 ${s.count}건만 지도·목록에 표시`}
-                        className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                        className={`shrink-0 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
                           active
                             ? "border-cyan-400/55 bg-cyan-600/30 text-cyan-50"
                             : "border-white/10 bg-black/20 text-slate-200 hover:border-teal-400/35"
                         }`}
                       >
-                        {s.month}월 {s.year}
+                        {s.month}월<span className="ml-0.5 font-mono text-[9px] opacity-55">'{String(s.year).slice(2)}</span>
                         <span className="ml-0.5 font-mono text-[9px] font-semibold opacity-80">({s.count})</span>
                       </button>
                     );
@@ -3087,76 +3241,6 @@ export default function Dashboard() {
                   </div>
                 ) : null}
               </div>
-              <input ref={fileImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} aria-hidden />
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={filterStart}
-                  onChange={(e) => setFilterStart(e.target.value)}
-                  className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-[11px] text-cyan-100/95 outline-none transition-[border,box-shadow] [color-scheme:dark] focus:ring-2 focus:ring-teal-400/25"
-                  style={{
-                    background: "rgba(12, 39, 72, 0.75)",
-                    border: "1px solid rgba(64,224,208,0.22)",
-                  }}
-                  aria-label="시작일"
-                />
-                <span className="shrink-0 text-xs font-medium text-teal-200/55">~</span>
-                <input
-                  type="date"
-                  value={filterEnd}
-                  onChange={(e) => setFilterEnd(e.target.value)}
-                  className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-[11px] text-cyan-100/95 outline-none transition-[border,box-shadow] [color-scheme:dark] focus:ring-2 focus:ring-teal-400/25"
-                  style={{
-                    background: "rgba(12, 39, 72, 0.75)",
-                    border: "1px solid rgba(64,224,208,0.22)",
-                  }}
-                  aria-label="종료일"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileImportRef.current?.click()}
-                  title="CSV 불러오기"
-                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-teal-100/90 transition-[background,color] hover:bg-teal-400/15 hover:text-cyan-50"
-                  style={{
-                    background: "rgba(64,224,208,0.08)",
-                    border: "1px solid rgba(64,224,208,0.22)",
-                  }}
-                >
-                  <Upload className="h-3.5 w-3.5 text-teal-200/90" aria-hidden />
-                  <span className="text-[9px] font-medium leading-none">불러오기</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => exportCSV(filteredDrops)}
-                  title={`CSV 저장 (${filteredDrops.length}건)`}
-                  className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 font-bold text-cyan-50 transition-[background,filter] hover:brightness-110"
-                  style={{
-                    background: "rgba(45,212,191,0.18)",
-                    border: "1px solid rgba(94,234,212,0.45)",
-                    boxShadow: "0 0 0 1px rgba(0,0,0,0.12) inset",
-                  }}
-                >
-                  <Download className="h-3.5 w-3.5 text-teal-100" aria-hidden />
-                  <span className="text-[9px] font-bold leading-none">CSV</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                disabled={fullResetBusy}
-                onClick={() => void handleFullReset()}
-                title="살포 이력·필터·선박 신호·살포 진행·지도 모드를 초기화하고 작업 예약을 기본 일정으로 되돌립니다"
-                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[11px] font-bold text-amber-100/95 transition-[background,opacity] hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-45"
-                style={{
-                  background: "rgba(251,191,36,0.12)",
-                  border: "1px solid rgba(251,191,36,0.35)",
-                }}
-              >
-                <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                전체 초기화
-              </button>
-              {(filterStart || filterEnd) && (
-                <p className="text-center text-[10px] text-teal-200/50">조회 {filteredDrops.length}건 · 전체 {drops.length}건</p>
-              )}
             </div>
           </div>
         </div>
@@ -3348,6 +3432,13 @@ export default function Dashboard() {
               maxBounds={mapMode === "real" ? null : OPS_AREA_MAX_BOUNDS}
               disableScrollWheelZoom
               offlineNoTiles={OFFLINE_MAP_NO_TILES}
+              remoteVessels={remoteVessels.map((rv) => ({
+                id: rv.vessel_id,
+                lat: rv.lat,
+                lng: rv.lng,
+                heading: rv.heading,
+                label: rv.vessel_id,
+              }))}
             />
           </div>
 
@@ -3743,15 +3834,15 @@ export default function Dashboard() {
                 }}
               >
                 <div className="mb-2 space-y-1.5 text-[11px] leading-relaxed text-white/55">
-                  <p>살포 점 색은 <strong className="text-slate-200/90">기록 시각이 얼마나 지났는지</strong>(기간)에 따라 붉은 계열 단계가 바뀝니다.</p>
+                  <p>살포 점 색은 <strong className="text-slate-200/90">기록 시각이 얼마나 지났는지</strong>(기간)에 따라 초록→노랑→주황→회색 단계가 바뀝니다.</p>
                   <p>
                     구역 살포(A01 등)와 금일 GNSS 시험 살포(
-                    <span className="font-mono text-slate-200/90">YYYY-MM-DD T01</span>)는 모두 위 붉은 계열 단계를 씁니다.
+                    <span className="font-mono text-slate-200/90">YYYY-MM-DD T01</span>)는 모두 위 연령 단계를 씁니다.
                   </p>
                   <p>
                     <span className="font-mono text-cyan-200/80">투하-</span>·<span className="font-mono text-cyan-200/80">GNSS-</span>·
                     <span className="font-mono text-cyan-200/80">센서-</span> 접두 라벨만 아래 <strong className="text-cyan-100/90">청록</strong>으로 표시합니다.
-                    (<span className="font-mono text-slate-200/80">mob-</span> id·날짜 <span className="font-mono text-slate-200/80">T##</span> 는 위 붉은 계열과 동일)
+                    (<span className="font-mono text-slate-200/80">mob-</span> id·날짜 <span className="font-mono text-slate-200/80">T##</span> 는 위 초록→회색 연령 단계와 동일)
                   </p>
                   <p>검정은 살포했으나 검수 시 위치가 맞지 않거나 누락된 부분입니다.</p>
                 </div>
