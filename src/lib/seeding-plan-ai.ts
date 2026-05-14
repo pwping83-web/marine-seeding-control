@@ -156,30 +156,30 @@ export function calcDailyLimit(wx: WeatherInput): DailyLimitResult {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * 거제·통영 인근 잠재 살포 구역 후보
- * 실제 사업구역 좌표를 대변하는 격자점 (0.025° 간격)
+ * 전라남도 여수 동남쪽 개방 해역 — 돌산도 동쪽 한국 남해 공해 살포 구역 후보
+ * WAYPOINTS 분포 (34.44~34.48°N · 127.88~128.13°E) 내 격자점
  */
 /** 작업 계획 뷰 지도 — 제1구역 후보 격자(지도 마커·맞춤용) */
 export const ZONE1_PLAN_MARKERS: ReadonlyArray<{ lat: number; lng: number; label: string }> = [
-  { lat: 34.710, lng: 128.580, label: "제1구역 A" },
-  { lat: 34.710, lng: 128.610, label: "제1구역 B" },
-  { lat: 34.710, lng: 128.640, label: "제1구역 C" },
+  { lat: 34.500, lng: 127.920, label: "제1구역 A" },
+  { lat: 34.500, lng: 127.960, label: "제1구역 B" },
+  { lat: 34.500, lng: 128.000, label: "제1구역 C" },
 ];
 
 const CANDIDATE_GRID: Array<{ lat: number; lng: number; label: string }> = [
-  // 거제 남부 해역
+  // 여수 동남쪽 외해 (돌산도 동쪽 개방 해역)
   ...ZONE1_PLAN_MARKERS,
-  // 통영 동부 해역
-  { lat: 34.735, lng: 128.555, label: "제2구역 A" },
-  { lat: 34.735, lng: 128.580, label: "제2구역 B" },
-  { lat: 34.735, lng: 128.610, label: "제2구역 C" },
-  // 거제 동부 내만
-  { lat: 34.760, lng: 128.580, label: "제3구역 A" },
-  { lat: 34.760, lng: 128.610, label: "제3구역 B" },
-  { lat: 34.760, lng: 128.640, label: "제3구역 C" },
-  // 한산도 근해
-  { lat: 34.785, lng: 128.555, label: "제4구역 A" },
-  { lat: 34.785, lng: 128.580, label: "제4구역 B" },
+  // 남해 개방 해역 중심
+  { lat: 34.465, lng: 127.900, label: "제2구역 A" },
+  { lat: 34.465, lng: 127.940, label: "제2구역 B" },
+  { lat: 34.465, lng: 127.980, label: "제2구역 C" },
+  // 남해 동부 해역
+  { lat: 34.540, lng: 127.900, label: "제3구역 A" },
+  { lat: 34.540, lng: 127.940, label: "제3구역 B" },
+  { lat: 34.540, lng: 127.980, label: "제3구역 C" },
+  // 남해 원해 구역
+  { lat: 34.460, lng: 128.020, label: "제4구역 A" },
+  { lat: 34.460, lng: 128.060, label: "제4구역 B" },
 ];
 
 /** 잘피(Zostera marina) 생육 최적 수심: 0.5 ~ 5 m */
@@ -187,11 +187,11 @@ const ZOSTERA_DEPTH_OPT = { min: 0.5, max: 5.0 };
 const ZOSTERA_TEMP_OPT  = { min: 12, max: 22 };
 const ZOSTERA_CURRENT_MAX = 0.8; // m/s 초과 시 생착 불량
 
-/** 거제 해역 수심 시뮬 (지형 특성 반영) */
+/** 여수 동남쪽 개방 해역 수심 시뮬 (지형 특성 반영) */
 function simDepth(lat: number, lng: number): number {
   // 남쪽·외해 방향일수록 깊어지는 경향
-  const southBias = (34.76 - lat) * 40;       // 남쪽 +2m per 0.05°
-  const eastBias  = (lng - 128.55) * 15;       // 외해 방향
+  const southBias = (34.54 - lat) * 40;       // 남쪽 +2m per 0.05°
+  const eastBias  = (lng - 127.88) * 15;       // 외해 방향
   const baseDepth = 3.2 + southBias + eastBias;
   // 소규모 지형 노이즈 (결정적 — 위경도 기반 해시)
   const noise = ((Math.sin(lat * 317) + Math.cos(lng * 421)) * 0.8);
@@ -201,8 +201,8 @@ function simDepth(lat: number, lng: number): number {
 /** 수온 시뮬 (계절·수심 반영) */
 function simTemp(depth: number): number {
   const month = new Date().getMonth() + 1;
-  // 남해 거제 수온 월별 평균 근사
-  const surfaceTemp = [9, 9, 10, 13, 17, 21, 24, 26, 23, 19, 15, 11][month - 1];
+  // 전라남도 여수 앞바다 수온 월별 평균 근사
+  const surfaceTemp = [10, 10, 11, 14, 18, 22, 25, 27, 24, 20, 16, 12][month - 1];
   // 수심별 하강 (thermocline 약 0.3°C/m)
   const depthCooling = Math.min(depth * 0.3, 4.0);
   return Math.round((surfaceTemp - depthCooling) * 10) / 10;
@@ -210,10 +210,10 @@ function simTemp(depth: number): number {
 
 /** 해류 시뮬 (조류 + 풍속 영향) */
 function simCurrent(lat: number, lng: number, wx: WeatherInput): { speed: number; dir: number } {
-  // 대마 난류 기본 방향 (NE 방향, 약 50°)
-  const baseDirDeg = 50;
-  // 조류 속도 (거제 내만 0.2~0.6 m/s, 외해 0.1~0.3)
-  const isInnerBay = lat > 34.74 && lng < 128.62;
+  // 남해 연안류 기본 방향 (NE 방향, 약 45°)
+  const baseDirDeg = 45;
+  // 조류 속도 (근해 내만 0.2~0.6 m/s, 외해 0.1~0.3)
+  const isInnerBay = lat > 34.55 && lng < 127.95;
   const baseSpeed = isInnerBay ? 0.35 : 0.18;
   // 풍속 추가 (풍향이 해류 방향과 유사할 때 증가)
   const windContrib = wx.windSpeed * 0.012;
@@ -296,10 +296,10 @@ export function rankSeedingZones(wx: WeatherInput): SeaZone[] {
  * 실제 운영 시 KHOA 해도 API로 대체 가능
  */
 export const KNOWN_OBSTACLES: Array<LatLng & { name: string; radiusKm: number }> = [
-  { lat: 34.722, lng: 128.592, name: "우제암 암초",      radiusKm: 0.3 },
-  { lat: 34.748, lng: 128.568, name: "한산도 보호구역",  radiusKm: 1.2 },
-  { lat: 34.775, lng: 128.625, name: "거제도 동안 암반", radiusKm: 0.5 },
-  { lat: 34.699, lng: 128.618, name: "칠천도 천수구역",  radiusKm: 0.8 },
+  { lat: 34.452, lng: 127.888, name: "안도 동쪽 암초",      radiusKm: 0.3 },
+  { lat: 34.480, lng: 128.062, name: "남해 동부 암반",      radiusKm: 0.5 },
+  { lat: 34.440, lng: 127.980, name: "공해 천수 구역",      radiusKm: 0.8 },
+  { lat: 34.510, lng: 127.930, name: "개방 해역 보호 구역", radiusKm: 1.0 },
 ];
 
 function haversineKm(a: LatLng, b: LatLng): number {

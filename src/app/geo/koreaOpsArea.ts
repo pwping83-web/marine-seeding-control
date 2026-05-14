@@ -1,21 +1,21 @@
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 
 /**
- * 남해 거제·통영 인근 시연 구역 (WGS84).
- * 지도 초기 중심·픽셀→위경도 기준점.
+ * 전라남도 여수 동남쪽 개방 해역 — 돌산도·군도 동쪽 한국 남해 공해상 (WGS84).
+ * 이 중심+SIM_SEA_OFFSET 기준으로 변환한 모든 WAYPOINTS가 육지를 피함.
+ * BASE(lat 34.54, lng 127.97) 기준 WAYPOINT 분포: 34.44~34.48°N · 127.88~128.13°E
  */
-export const OPS_AREA_CENTER = { lat: 34.76, lng: 128.6 } as const;
+export const OPS_AREA_CENTER = { lat: 34.57, lng: 127.97 } as const;
 
 /**
- * 시뮬 픽셀→위경도만으로는 OSM/CARTO 육지와 어긋나 육지에 찍히는 경우가 있어,
- * 살포·항적을 **거제 앞 남해 해상**으로 통일 보정(°).
+ * 시뮬 픽셀→위경도 보정: 남쪽으로 0.03° 이동하여 군도를 완전히 벗어난 개방 해역에 배치.
  */
-export const SIM_SEA_OFFSET = { lat: -0.055, lng: 0.01 } as const;
+export const SIM_SEA_OFFSET = { lat: -0.03, lng: 0.0 } as const;
 
-/** 지도 패닝: 남해 거제·통영·진해 일대만 (시연 구역 최대 확대에 맞춘 좁은 박스) */
+/** 지도 패닝: 전라남도 여수·고흥·개방 해역 포함 */
 export const OPS_AREA_MAX_BOUNDS: LatLngBoundsExpression = [
-  [34.12, 127.72],
-  [35.38, 129.48],
+  [33.8, 126.5],
+  [35.2, 129.0],
 ];
 
 export function opsCenterTuple(): [number, number] {

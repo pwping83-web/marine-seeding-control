@@ -22,6 +22,39 @@
   background: rgba(94, 234, 212, 0.45);
 }
 
+/* ─── 경유지 편집 팝업 — 다크 테마 오버라이드 ─────────────────────────────── */
+/* Leaflet 기본 흰색 박스 제거, 앱 테마와 일치하는 반투명 네이비 박스로 교체   */
+.route-wpt-popup .leaflet-popup-content-wrapper {
+  background: rgba(7, 20, 40, 0.96);
+  border: 1px solid rgba(45, 212, 191, 0.38);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  padding: 0;
+  color: #e2e8f0;
+}
+.route-wpt-popup .leaflet-popup-content {
+  margin: 0;
+  line-height: 1.4;
+}
+.route-wpt-popup .leaflet-popup-tip-container {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+.route-wpt-popup .leaflet-popup-tip {
+  background: rgba(7, 20, 40, 0.96);
+  box-shadow: none;
+}
+.route-wpt-popup .leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.35) !important;
+  top: 5px !important;
+  right: 7px !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+}
+.route-wpt-popup .leaflet-popup-close-button:hover {
+  color: rgba(255, 255, 255, 0.75) !important;
+  background: transparent !important;
+}
+
 /* Leaflet — 기본 z-index가 대시보드 오버레이보다 위로 올라오지 않게 */
 .leaflet-container {
   font-family: inherit;

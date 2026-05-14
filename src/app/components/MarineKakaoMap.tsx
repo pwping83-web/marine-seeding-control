@@ -52,35 +52,39 @@ function KakaoWaypointEditorMarker({
       }}
       infoWindowOptions={{ disableAutoPan: true }}
     >
-      <div className="min-w-[10.5rem] space-y-2 p-0.5 text-xs text-slate-800">
-        <p className="font-bold text-slate-700">경유지 {index + 1}</p>
-        <p className="text-[10px] leading-snug text-slate-600">
-          마커를 드래그해 옮기거나, 아래 좌표를 고친 뒤 「좌표 적용」을 누르세요.
-        </p>
-        <label className="block">
-          <span className="text-[10px] text-slate-500">위도</span>
+      <div
+        className="w-[9.5rem] space-y-1.5 rounded-xl px-2.5 py-2 text-xs"
+        style={{
+          background: "rgba(7,20,40,0.96)",
+          border: "1px solid rgba(45,212,191,0.38)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        }}
+      >
+        <p className="text-[11px] font-bold text-teal-300">경유지 {index + 1}</p>
+        <div className="grid grid-cols-[2rem_1fr] items-center gap-x-1.5 gap-y-1">
+          <span className="text-[10px] text-white/45">위도</span>
           <input
             type="text"
             value={laStr}
             onChange={(ev) => setLaStr(ev.target.value)}
-            className="mt-0.5 w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]"
+            className="w-full rounded border px-1 py-0.5 font-mono text-[10px] text-cyan-100 outline-none [color-scheme:dark]"
+            style={{ background: "rgba(255,255,255,0.06)", borderColor: "rgba(64,224,208,0.25)" }}
             spellCheck={false}
           />
-        </label>
-        <label className="block">
-          <span className="text-[10px] text-slate-500">경도</span>
+          <span className="text-[10px] text-white/45">경도</span>
           <input
             type="text"
             value={lnStr}
             onChange={(ev) => setLnStr(ev.target.value)}
-            className="mt-0.5 w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]"
+            className="w-full rounded border px-1 py-0.5 font-mono text-[10px] text-cyan-100 outline-none [color-scheme:dark]"
+            style={{ background: "rgba(255,255,255,0.06)", borderColor: "rgba(64,224,208,0.25)" }}
             spellCheck={false}
           />
-        </label>
-        <div className="flex flex-wrap gap-1 pt-0.5">
+        </div>
+        <div className="flex gap-1.5 pt-0.5">
           <button
             type="button"
-            className="rounded bg-teal-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-teal-500"
+            className="flex-1 rounded bg-teal-600/80 py-1 text-[10px] font-bold text-white hover:bg-teal-500/90"
             onClick={() => {
               const la = parseFloat(laStr.replace(",", "."));
               const ln = parseFloat(lnStr.replace(",", "."));
@@ -88,11 +92,11 @@ function KakaoWaypointEditorMarker({
               onVertexCoordsApply(index, la, ln);
             }}
           >
-            좌표 적용
+            적용
           </button>
           <button
             type="button"
-            className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-800 hover:bg-rose-100"
+            className="flex-1 rounded border border-rose-500/40 bg-rose-900/30 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-800/40"
             onClick={() => onVertexRemove(index)}
           >
             삭제

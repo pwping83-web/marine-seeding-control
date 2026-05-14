@@ -2335,8 +2335,8 @@ export default function Dashboard() {
   }, [workAiModalOpen, displaySafetyLevel, weather.windSpeed, weather.waveHeight, weather.temp, workLocalRec, workAiUserNote, weatherNowcastNote]);
 
   // 현재 선박 위치 (SOS 토스트 좌표)
-  const sosVesselLat = vessel.lat !== 0 ? vessel.lat : 34.8756;
-  const sosVesselLng = vessel.lng !== 0 ? vessel.lng : 128.6812;
+  const sosVesselLat = vessel.lat !== 0 ? vessel.lat : 34.7430;
+  const sosVesselLng = vessel.lng !== 0 ? vessel.lng : 127.7402;
 
   return (
     <div className="flex h-svh min-h-0 w-full items-stretch overflow-hidden font-sans text-[15px] leading-snug sm:text-[16px] antialiased">
