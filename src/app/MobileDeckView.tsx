@@ -3,10 +3,12 @@
  * 로그인 후: URL이 `/mobile` 이거나 가로 768px 미만이면 자동으로 이 화면.
  * 관제 대시보드와 `ship_command_logs` / BroadcastChannel 으로 살포 신호 동기.
  */
+/// <reference types="kakao.maps.d.ts" />
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import * as L from "leaflet";
+import { CustomOverlayMap, Map, useKakaoLoader } from "react-kakao-maps-sdk";
 import {
   Brain,
   CircleSlash,
@@ -109,6 +111,133 @@ function MapFollowUser({
   return null;
 }
 
+function mobilePseudoLeafletZoomToKakao(z: number): number {
+  return Math.max(1, Math.min(14, 19 - Math.round(z)));
+}
+
+function MobileDeckKakaoMap({
+  appkey,
+  center,
+  pos,
+  sessionDrops,
+  recenterNonce,
+  seedingActive,
+}: {
+  appkey: string;
+  center: [number, number];
+  pos: { lat: number; lng: number; heading: number } | null;
+  sessionDrops: SeedDropInput[];
+  recenterNonce: number;
+  seedingActive: boolean;
+}) {
+  const [, loadErr] = useKakaoLoader({ appkey });
+  const [map, setMap] = useState<kakao.maps.Map | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!map || !pos) return;
+    map.setCenter(new kakao.maps.LatLng(pos.lat, pos.lng));
+    map.setLevel(mobilePseudoLeafletZoomToKakao(15), { animate: true });
+  }, [map, pos, recenterNonce]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || !map) return;
+    const ro = new ResizeObserver(() => {
+      (map as unknown as { relayout?: () => void }).relayout?.();
+    });
+    ro.observe(el);
+    (map as unknown as { relayout?: () => void }).relayout?.();
+    return () => ro.disconnect();
+  }, [map]);
+
+  const ownShipHtml = useMemo(() => {
+    if (!pos) return "";
+    const pinCls = seedingActive
+      ? "marine-gps-ownship-pin marine-gps-ownship-pin--seeding"
+      : "marine-gps-ownship-pin";
+    return `<div class="marine-gps-ownship-divicon"><div class="${pinCls}" style="transform:rotate(${pos.heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div></div>`;
+  }, [pos, seedingActive]);
+
+  if (loadErr) {
+    return (
+      <div className="flex h-full min-h-[40vh] w-full items-center justify-center bg-[#0a1628] px-2 text-center text-[11px] text-amber-200">
+        함정 지도(카카오)를 불러오지 못했습니다.
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapRef} className="h-full w-full min-h-[40vh]">
+      <Map
+        center={{ lat: center[0], lng: center[1] }}
+        style={{ width: "100%", height: "100%", minHeight: "40vh" }}
+        level={pos ? mobilePseudoLeafletZoomToKakao(15) : mobilePseudoLeafletZoomToKakao(11)}
+        scrollwheel
+        mapTypeId={kakao.maps.MapTypeId.ROADMAP}
+        onCreate={setMap}
+      >
+        {sessionDrops.map((d, i) => {
+          const isLast = i === sessionDrops.length - 1;
+          const c = seedDropMarkerColors({
+            recordedAt: d.recordedAt,
+            label: d.label,
+            id: d.id,
+            verificationMismatch: d.verificationMismatch,
+          });
+          const parts = parseTestStyleDropLabel(d.label);
+          const r = isLast ? 10 : 7;
+          return (
+            <CustomOverlayMap
+              key={d.id}
+              position={{ lat: d.lat, lng: d.lng }}
+              xAnchor={0}
+              yAnchor={0.5}
+              zIndex={400}
+            >
+              <div
+                className="flex items-center gap-1.5"
+                style={{ pointerEvents: "none", whiteSpace: "nowrap" }}
+              >
+                <span
+                  style={{
+                    width: r * 2,
+                    height: r * 2,
+                    borderRadius: 9999,
+                    background: c.fill,
+                    border: `${isLast ? 2.2 : 1.4}px solid ${c.stroke}`,
+                    boxShadow: "0 1px 6px rgba(0,0,0,.45)",
+                    flexShrink: 0,
+                  }}
+                />
+                <span className="!rounded-md !border !border-white/20 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-mono !font-bold !text-teal-100 !shadow-lg">
+                  {parts ? (
+                    <span className="block whitespace-nowrap font-mono text-[10px] font-bold leading-tight">
+                      {parts.displayLine}
+                    </span>
+                  ) : (
+                    <span className="block whitespace-nowrap font-mono text-[10px] leading-tight">{d.label}</span>
+                  )}
+                </span>
+              </div>
+            </CustomOverlayMap>
+          );
+        })}
+        {pos ? (
+          <CustomOverlayMap
+            position={{ lat: pos.lat, lng: pos.lng }}
+            xAnchor={0.5}
+            yAnchor={0.5}
+            zIndex={900}
+          >
+            <div dangerouslySetInnerHTML={{ __html: ownShipHtml }} />
+          </CustomOverlayMap>
+        ) : null}
+      </Map>
+    </div>
+  );
+}
+
 export default function MobileDeckView() {
   const [pos, setPos] = useState<{ lat: number; lng: number; heading: number } | null>(null);
   const [geoErr, setGeoErr] = useState<string | null>(null);
@@ -140,6 +269,8 @@ export default function MobileDeckView() {
     () => (pos ? [pos.lat, pos.lng] : [OPS_AREA_CENTER.lat, OPS_AREA_CENTER.lng]),
     [pos],
   );
+
+  const kakaoJsKey = import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY?.trim() ?? "";
 
   const weatherNowcastNote = useMemo(() => {
     if (isKmaApiConfigured()) return "지금: 단기예보 동기화(주기 갱신)";
@@ -570,60 +701,71 @@ export default function MobileDeckView() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <MapContainer
-          center={center}
-          zoom={pos ? 15 : 11}
-          className="h-full w-full min-h-[40vh]"
-          scrollWheelZoom
-          attributionControl
-        >
-          <TileLayer attribution={TILE_ATTR} url={TILE_CARTO_DARK} />
-          {sessionDrops.map((d, i) => {
-            const isLast = i === sessionDrops.length - 1;
-            const c = seedDropMarkerColors({
-              recordedAt: d.recordedAt,
-              label: d.label,
-              id: d.id,
-              verificationMismatch: d.verificationMismatch,
-            });
-            const parts = parseTestStyleDropLabel(d.label);
-            return (
-              <CircleMarker
-                key={d.id}
-                center={[d.lat, d.lng]}
-                radius={isLast ? 10 : 7}
-                pathOptions={{
-                  color: c.stroke,
-                  fillColor: c.fill,
-                  fillOpacity: 0.9,
-                  weight: isLast ? 2.2 : 1.4,
-                }}
-              >
-                <Tooltip
-                  permanent
-                  direction="right"
-                  offset={[12, 0]}
-                  opacity={1}
-                  className="!rounded-md !border !border-white/20 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-mono !font-bold !text-teal-100 !shadow-lg"
+        {kakaoJsKey ? (
+          <MobileDeckKakaoMap
+            appkey={kakaoJsKey}
+            center={center}
+            pos={pos}
+            sessionDrops={sessionDrops}
+            recenterNonce={recenterNonce}
+            seedingActive={seedingActive}
+          />
+        ) : (
+          <MapContainer
+            center={center}
+            zoom={pos ? 15 : 11}
+            className="h-full w-full min-h-[40vh]"
+            scrollWheelZoom
+            attributionControl
+          >
+            <TileLayer attribution={TILE_ATTR} url={TILE_CARTO_DARK} />
+            {sessionDrops.map((d, i) => {
+              const isLast = i === sessionDrops.length - 1;
+              const c = seedDropMarkerColors({
+                recordedAt: d.recordedAt,
+                label: d.label,
+                id: d.id,
+                verificationMismatch: d.verificationMismatch,
+              });
+              const parts = parseTestStyleDropLabel(d.label);
+              return (
+                <CircleMarker
+                  key={d.id}
+                  center={[d.lat, d.lng]}
+                  radius={isLast ? 10 : 7}
+                  pathOptions={{
+                    color: c.stroke,
+                    fillColor: c.fill,
+                    fillOpacity: 0.9,
+                    weight: isLast ? 2.2 : 1.4,
+                  }}
                 >
-                  {parts ? (
-                    <span className="block whitespace-nowrap font-mono text-[10px] font-bold leading-tight">
-                      {parts.displayLine}
-                    </span>
-                  ) : (
-                    <span className="block whitespace-nowrap font-mono text-[10px] leading-tight">{d.label}</span>
-                  )}
-                </Tooltip>
-              </CircleMarker>
-            );
-          })}
-          {pos && ownShipIcon ? (
-            <>
-              <Marker position={[pos.lat, pos.lng]} icon={ownShipIcon} zIndexOffset={900} />
-              <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} recenterNonce={recenterNonce} />
-            </>
-          ) : null}
-        </MapContainer>
+                  <Tooltip
+                    permanent
+                    direction="right"
+                    offset={[12, 0]}
+                    opacity={1}
+                    className="!rounded-md !border !border-white/20 !bg-[#041c2e]/95 !px-2 !py-0.5 !text-[10px] !font-mono !font-bold !text-teal-100 !shadow-lg"
+                  >
+                    {parts ? (
+                      <span className="block whitespace-nowrap font-mono text-[10px] font-bold leading-tight">
+                        {parts.displayLine}
+                      </span>
+                    ) : (
+                      <span className="block whitespace-nowrap font-mono text-[10px] leading-tight">{d.label}</span>
+                    )}
+                  </Tooltip>
+                </CircleMarker>
+              );
+            })}
+            {pos && ownShipIcon ? (
+              <>
+                <Marker position={[pos.lat, pos.lng]} icon={ownShipIcon} zIndexOffset={900} />
+                <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} recenterNonce={recenterNonce} />
+              </>
+            ) : null}
+          </MapContainer>
+        )}
         {geoErr ? (
           <div className="pointer-events-none absolute left-2 right-2 top-2 rounded-md bg-black/70 px-2 py-1 text-center text-[11px] text-amber-200">
             위치: {geoErr}
