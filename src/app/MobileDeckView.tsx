@@ -134,10 +134,16 @@ function MobileDeckKakaoMap({
   const [map, setMap] = useState<kakao.maps.Map | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  const recenterNonceRef = useRef(recenterNonce);
+
   useEffect(() => {
     if (!map || !pos) return;
+    const didRecenter = recenterNonce !== recenterNonceRef.current;
+    recenterNonceRef.current = recenterNonce;
     map.setCenter(new kakao.maps.LatLng(pos.lat, pos.lng));
-    map.setLevel(mobilePseudoLeafletZoomToKakao(15), { animate: true });
+    if (didRecenter) {
+      map.setLevel(mobilePseudoLeafletZoomToKakao(15), { animate: true });
+    }
   }, [map, pos, recenterNonce]);
 
   useEffect(() => {
@@ -159,6 +165,17 @@ function MobileDeckKakaoMap({
     return `<div class="marine-gps-ownship-divicon"><div class="${pinCls}" style="transform:rotate(${pos.heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div></div>`;
   }, [pos, seedingActive]);
 
+  const posRef = useRef(pos);
+  posRef.current = pos;
+
+  const handleMapCreate = useCallback((m: kakao.maps.Map) => {
+    const initLevel = posRef.current
+      ? mobilePseudoLeafletZoomToKakao(15)
+      : mobilePseudoLeafletZoomToKakao(11);
+    m.setLevel(initLevel, { animate: false });
+    setMap(m);
+  }, []);
+
   if (loadErr) {
     return (
       <div className="flex h-full min-h-[40vh] w-full items-center justify-center bg-[#0a1628] px-2 text-center text-[11px] text-amber-200">
@@ -172,10 +189,9 @@ function MobileDeckKakaoMap({
       <Map
         center={{ lat: center[0], lng: center[1] }}
         style={{ width: "100%", height: "100%", minHeight: "40vh" }}
-        level={pos ? mobilePseudoLeafletZoomToKakao(15) : mobilePseudoLeafletZoomToKakao(11)}
         scrollwheel
-        mapTypeId={kakao.maps.MapTypeId.ROADMAP}
-        onCreate={setMap}
+        mapTypeId="ROADMAP"
+        onCreate={handleMapCreate}
       >
         {sessionDrops.map((d, i) => {
           const isLast = i === sessionDrops.length - 1;

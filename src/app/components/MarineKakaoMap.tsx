@@ -207,6 +207,13 @@ export function MarineKakaoMap({ appkey, ...props }: Props) {
 
   void _basemap;
 
+  /** 카카오 ROADMAP: 작은 level = 확대. 운영구역 제한 시 확대/축소 한계. */
+  const kakaoMinInLevel = maxBounds != null ? 2 : 1;
+  const kakaoMaxOutLevel = maxBounds != null ? 12 : 14;
+  /** react-kakao-maps-sdk Map.js 가 setMinLevel(maxLevel prop)·setMaxLevel(minLevel prop) 로 넘겨 순서가 뒤집혀 있음 → 교차 전달 */
+  const mapPropMinLevel = kakaoMaxOutLevel;
+  const mapPropMaxLevel = kakaoMinInLevel;
+
   const planned = plannedSeedMarkers ?? [];
 
   const fitPoints = useMemo(() => {
@@ -301,41 +308,36 @@ export function MarineKakaoMap({ appkey, ...props }: Props) {
       }
       const extra = Math.max(0, Math.min(4, postFitZoomLevels));
       if (extra > 0) {
-        const cur = m.getLevel();
-        m.setLevel(Math.max(1, cur - extra), { animate: false });
+        m.setLevel(Math.max(kakaoMinInLevel, m.getLevel() - extra), { animate: false });
       }
       onMapZoomLevel?.(kakaoLevelToPseudoLeaflet(m.getLevel()));
     });
     return () => cancelAnimationFrame(raf);
-  }, [fitNonce, map, postFitZoomLevels, onMapZoomLevel]);
+  }, [fitNonce, map, postFitZoomLevels, onMapZoomLevel, kakaoMinInLevel]);
 
   const lastInRef = useRef(0);
   const lastOutRef = useRef(0);
   useEffect(() => {
     if (!map) return;
     const d = mapZoomInNonce - lastInRef.current;
-    if (d > 0) {
-      for (let i = 0; i < d; i++) {
-        const L = map.getLevel();
-        map.setLevel(Math.max(1, L - 1), { animate: false });
-      }
-    }
     lastInRef.current = mapZoomInNonce;
+    if (d > 0) {
+      const next = Math.max(kakaoMinInLevel, map.getLevel() - d);
+      map.setLevel(next, { animate: true });
+    }
     onMapZoomLevel?.(kakaoLevelToPseudoLeaflet(map.getLevel()));
-  }, [mapZoomInNonce, map, onMapZoomLevel]);
+  }, [mapZoomInNonce, map, onMapZoomLevel, kakaoMinInLevel]);
 
   useEffect(() => {
     if (!map) return;
     const d = mapZoomOutNonce - lastOutRef.current;
-    if (d > 0) {
-      for (let i = 0; i < d; i++) {
-        const L = map.getLevel();
-        map.setLevel(Math.min(14, L + 1), { animate: false });
-      }
-    }
     lastOutRef.current = mapZoomOutNonce;
+    if (d > 0) {
+      const next = Math.min(kakaoMaxOutLevel, map.getLevel() + d);
+      map.setLevel(next, { animate: true });
+    }
     onMapZoomLevel?.(kakaoLevelToPseudoLeaflet(map.getLevel()));
-  }, [mapZoomOutNonce, map, onMapZoomLevel]);
+  }, [mapZoomOutNonce, map, onMapZoomLevel, kakaoMaxOutLevel]);
 
   const prevVesselRef = useRef<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
@@ -375,8 +377,28 @@ export function MarineKakaoMap({ appkey, ...props }: Props) {
     [replayTrackVertexEditor, seedPlanMapEditor],
   );
 
-  const minLevel = maxBounds != null ? 2 : 1;
-  const maxLevel = maxBounds != null ? 12 : 14;
+  /**
+   * onCreate 를 인라인 함수로 넘기면 react-kakao-maps-sdk Map.js 가
+   * useIsomorphicLayoutEffect([map, onCreate]) 로 감시하다가
+   * 렌더마다 새 함수 참조가 생겨 onCreate(map) 을 재호출 → setLevel(초기값) 리셋.
+   * useCallback([]) 으로 참조를 고정해 최초 1회만 실행되도록 한다.
+   */
+  const disableScrollWheelZoomRef = useRef(disableScrollWheelZoom);
+  disableScrollWheelZoomRef.current = disableScrollWheelZoom;
+
+  const handleMapCreate = useCallback((m: kakao.maps.Map) => {
+    m.setLevel(pseudoLeafletZoomToKakao(16), { animate: false });
+    if (disableScrollWheelZoomRef.current) {
+      m.setZoomable(false);
+    }
+    setMap(m);
+  }, []); // 빈 deps — 카카오 지도 인스턴스 최초 생성 시 1회만 실행
+
+  /** disableScrollWheelZoom prop 이 런타임에 바뀌면 별도 effect 로 반영 */
+  useEffect(() => {
+    if (!map) return;
+    map.setZoomable(!disableScrollWheelZoom);
+  }, [map, disableScrollWheelZoom]);
 
   if (loadErr) {
     return (
@@ -394,15 +416,16 @@ export function MarineKakaoMap({ appkey, ...props }: Props) {
       className={`marine-ops-map-root z-0 flex h-full w-full min-h-[200px] flex-col ${className}`}
     >
       <div className="relative min-h-0 flex-1" style={{ minHeight: 200 }}>
+        {/*
+         * level/zoomable/scrollwheel prop 을 Map 컴포넌트에 넘기면 react-kakao-maps-sdk 가
+         * 매 렌더마다 setLevel / setZoomable / setScrollwheel 을 호출해 외부 zoom 제어를 덮어씀.
+         * 초기 설정은 onCreate 에서 1회만 직접 호출.
+         */}
         <Map
           center={{ lat: center[0], lng: center[1] }}
           style={{ width: "100%", height: "100%", minHeight: 200 }}
-          level={pseudoLeafletZoomToKakao(16)}
-          minLevel={minLevel}
-          maxLevel={maxLevel}
-          scrollwheel={!disableScrollWheelZoom}
-          mapTypeId={kakao.maps.MapTypeId.ROADMAP}
-          onCreate={setMap}
+          mapTypeId="ROADMAP"
+          onCreate={handleMapCreate}
           onZoomChanged={(m) => onMapZoomLevel?.(kakaoLevelToPseudoLeaflet(m.getLevel()))}
           onClick={replayTrackVertexEditor || seedPlanMapEditor ? onMapClick : undefined}
         >
