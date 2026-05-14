@@ -20,10 +20,10 @@
  * · `DROP_TRIGGER_ON_HIGH`: true=상승 에지(LOW→HIGH)에 살포 1건, false=하강 에지(택트→GND).
  * · 배선은 릴레이·단말과 **공통 GND** 맞출 것.
  *
- * 문서: arduino/README.md , arduino/docs/03·04·05
+ * 문서: arduino/README.md , arduino/아두이노-스케치-모음/문서/03·04·05
  *
  * 보드: GPS+LTE 일체형(예: LilyGO T-SIM7600 등) 구매 예정이면 하드웨어는 문서
- * arduino/docs/01-보드와-LTE-모뎀-구매-현실.md §2-1 참고.
+ * arduino/아두이노-스케치-모음/문서/01-보드와-LTE-모뎀-구매-현실.md 2-1절 참고.
  * 이 스케치의 HTTPS 는 기본 WiFi 경로 — LTE 데이터만 쓸 때는 모뎀 라이브러리로
  * PDP/HTTP 를 연결한 뒤 같은 URL·JSON 으로 POST 하도록 바꾸면 됨.
  *
@@ -33,7 +33,7 @@
  * · `VESSEL_ID`, 살포 핀·시간 상수, `SEED_DROP_*` 안전 상수, `readGpsFix`·라벨·`drop_time` 등
  * · **딜레이·동작 시간**: `*_MS` 상수와 `delay(...)` 숫자는 **변경 가능**(단위 ms, 1000=1초).
  *
- * 모터·릴레이·비상정지까지 필요하면 `arduino/sketches/esp32-marine-telemetry-motor-relay/` 스케치 사용.
+ * 모터·릴레이·비상정지까지 필요하면 `arduino/아두이노-스케치-모음/해상-궤적-살포-모터릴레이/esp32-marine-telemetry-motor-relay/` 스케치 사용.
  *
  * ━━━ 살포·궤적 안전 장치(요약) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * · 부팅 후 `SEED_DROP_BOOT_GRACE_MS` 동안 살포 에지 무시(전원·노이즈 오발)
@@ -97,8 +97,8 @@ static const unsigned long DROP_COOLDOWN_MS = 1500;
 // ─── 궤적 전송 주기: POST_INTERVAL_MS — 변경 가능·시간 조절 ───────────────
 /** 관제 웹 `.env` 의 `VITE_VESSEL_LTE_ID` 등과 동일 문자열 권장. */
 static const char *VESSEL_ID = "제3해양살포함";
-/** 선박 궤적 POST 간격(ms) — 변경 가능·시간 조절. 60000=1분 등. */
-static const unsigned long POST_INTERVAL_MS = 60UL * 1000UL;
+/** 선박 궤적 POST 간격(ms) — 변경 가능·시간 조절. 관제 `VITE_VESSEL_LTE_POLL_MS` 와 맞추면 화면 점 간격이 자연스럽다. */
+static const unsigned long POST_INTERVAL_MS = 2000UL;
 static unsigned long lastVesselPostMs = 0;
 #endif
 

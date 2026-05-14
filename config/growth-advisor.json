@@ -42,7 +42,7 @@
       ],
       "docLinks": [
         { "label": "관공서 제출용", "path": "관공서-제출용/README.md" },
-        { "label": "하드웨어·단말", "path": "docs/hardware-arduino-gnss-seed/README.md" }
+        { "label": "하드웨어·단말", "path": "docs/장치-연동-기준서/07-아두이노-GNSS-살포-연동-실무-가이드.md" }
       ]
     },
     {

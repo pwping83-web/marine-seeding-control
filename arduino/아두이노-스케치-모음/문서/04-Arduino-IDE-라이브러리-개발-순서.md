@@ -37,7 +37,7 @@
 
 ## 4. 스케치 열고 처음 할 일
 
-1. `arduino/sketches/esp32-marine-telemetry/esp32_marine_telemetry.ino` 열기  
+1. `arduino/아두이노-스케치-모음/해상-궤적-살포-통합/esp32-marine-telemetry/esp32_marine_telemetry.ino` 열기  
 2. 상단 `#define USE_ESP32_HTTP 0` 을 **`1`** 로 변경 (실제 전송 시험 시)  
 3. 다음 상수를 **본인 값**으로 수정:
    - `WIFI_SSID` / `WIFI_PASS` (또는 나중에 LTE만 쓸 때는 모뎀 예제 쪽으로 이전)

@@ -6,6 +6,6 @@
 |------|------|
 | [블루투스-살포-거치대-연동-계획.md](./블루투스-살포-거치대-연동-계획.md) | 거치대·BLE 연동 구상 (`seed_start`/`seed_stop` 중심, 투하와 구분) |
 | [투하-연동-제안서-방안1-방안2.md](./투하-연동-제안서-방안1-방안2.md) | 투하(방류) 1건씩 서버로 보내는 방안 비교 |
-| [센서→웹 투하·DB·구현 체크리스트](../hardware-arduino-gnss-seed/README.md) | **정식 구현 기준** 문서 — `telemetry-ingest`, `seed_drop_records`, “자동 버튼”의 실제 의미 |
+| [센서→웹 투하·DB·구현 체크리스트](../장치-연동-기준서/07-아두이노-GNSS-살포-연동-실무-가이드.md) | **정식 구현 기준** 문서 — `telemetry-ingest`, `seed_drop_records`, “자동 버튼”의 실제 의미 |
 
 상위 인덱스: [`docs/README.md`](../README.md)

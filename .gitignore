@@ -43,6 +43,9 @@ yarn-error.log*
 /blob-report/
 /playwright/.cache/
 
+# Google Drive 동기화 업로드 임시 파일(로컬에만 생김 — 커밋 대상 아님)
+*.tmp.driveupload
+
 # Editor / OS
 .DS_Store
 Thumbs.db

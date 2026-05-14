@@ -1443,8 +1443,8 @@ export default function Dashboard() {
     const pollParsed =
       pollRaw != null && String(pollRaw).trim() !== "" ? Number(pollRaw) : Number.NaN;
     const pollMs = Number.isFinite(pollParsed)
-      ? Math.min(120_000, Math.max(5000, pollParsed))
-      : 12_000;
+      ? Math.min(120_000, Math.max(2000, pollParsed))
+      : 2000;
 
     const tick = async () => {
       const pts = await fetchVesselTrackPoints(vesselLteId, 500);
@@ -1608,8 +1608,8 @@ export default function Dashboard() {
     const pollParsed =
       pollRaw != null && String(pollRaw).trim() !== "" ? Number(pollRaw) : Number.NaN;
     const pollMs = Number.isFinite(pollParsed)
-      ? Math.min(120_000, Math.max(4000, pollParsed))
-      : 12_000;
+      ? Math.min(120_000, Math.max(1000, pollParsed))
+      : 1000;
 
     const mergeDropsFromDb = async () => {
       if (cancelled || !dropsDbReady.current) return;

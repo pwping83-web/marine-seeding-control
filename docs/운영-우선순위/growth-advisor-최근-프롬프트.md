@@ -34,7 +34,7 @@
 
 참고 문서:
 - `관공서-제출용/README.md` — 관공서 제출용
-- `docs/hardware-arduino-gnss-seed/README.md` — 하드웨어·단말
+- `docs/장치-연동-기준서/07-아두이노-GNSS-살포-연동-실무-가이드.md` — 하드웨어·단말·웹·DB 연동 실무
 
 ### 조달·기관 연락
 
