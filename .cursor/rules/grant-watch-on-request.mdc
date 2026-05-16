@@ -45,6 +45,7 @@ npm run grant:watch
 
 ## 3. 산출물 (항상 이 경로)
 
+- **Living 허브 (사용자 질문·갱신의 단일 문서):** `docs/사업-공고/00_지원사업-공고-허브.md` — 「지원사업 알려줘」「허브 갱신」「공고 문서 업데이트」 시 `grant:watch`·수동 공고 반영 후 **§2·§3·§6(이력)** 를 갱신한다.
 - **마크다운 리포트 (공고 제목 = 클릭 링크):** `docs/사업-공고/99_공고-모니터링-최근결과.md` — `scripts/grant-watch/run.mjs`가 자동 생성한다.
 - **기계-readable:** `artifacts/grant-watch/grant-hub-last-run.json`
 

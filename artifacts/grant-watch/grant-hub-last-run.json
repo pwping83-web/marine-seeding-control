@@ -1,11 +1,11 @@
 {
-  "fetchedAt": "2026-05-10T06:10:09.667Z",
+  "fetchedAt": "2026-05-16T15:51:33.905Z",
   "configPath": "D:\\Marine Seeding Control System\\scripts\\grant-watch\\config.json",
   "iris": {
     "source": "iris",
     "listUrl": "https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituListView.do",
     "tab": "접수중",
-    "fetchedAt": "2026-05-10T06:09:54.684Z",
+    "fetchedAt": "2026-05-16T15:51:20.587Z",
     "keywords": [
       "해양",
       "수산",
@@ -41,9 +41,21 @@
     "enrichDetailDates": true,
     "detailLimit": 30,
     "enrichAllMatched": true,
-    "totalCollected": 69,
+    "totalCollected": 62,
     "matchedCount": 11,
     "items": [
+      {
+        "ancmId": "020774",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 개도국기후기술실증연구 사업 신규과제 재공모",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "실증"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-05-22",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-05-22"
+      },
       {
         "ancmId": "021357",
         "ancmPrg": "ancmIng",
@@ -67,6 +79,42 @@
         "applyPeriod": "2026-05-07 ~ 2026-05-29",
         "applyStartDate": "2026-05-07",
         "applyEndDate": "2026-05-29"
+      },
+      {
+        "ancmId": "021337",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_자유품목) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021337&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01"
+      },
+      {
+        "ancmId": "021336",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_수요품목) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021336&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01"
+      },
+      {
+        "ancmId": "021334",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(자유공모형_일반) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021334&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01"
       },
       {
         "ancmId": "021121",
@@ -106,44 +154,6 @@
         "applyEndDate": "2026-05-22"
       },
       {
-        "ancmId": "020774",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 개도국기후기술실증연구 사업 신규과제 공모",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "실증"
-        ],
-        "applyPeriod": "2026-04-10 ~ 2026-05-12",
-        "applyStartDate": "2026-04-10",
-        "applyEndDate": "2026-05-12"
-      },
-      {
-        "ancmId": "020554",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 한국형Manufacturing-X플랫폼표준모델개발및실증(R&D) 신규지원 대상과제 공고",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020554&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "플랫폼",
-          "R&D",
-          "실증"
-        ],
-        "applyPeriod": "2026-04-10 ~ 2026-05-11",
-        "applyStartDate": "2026-04-10",
-        "applyEndDate": "2026-05-11"
-      },
-      {
-        "ancmId": "020533",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 중소기업기술혁신개발사업 '중소기업유망기술개발(구조혁신R&D)' 하반기 1차 시행계획 공고",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020533&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "R&D"
-        ],
-        "applyPeriod": "2026-04-23 ~ 2026-05-11",
-        "applyStartDate": "2026-04-23",
-        "applyEndDate": "2026-05-11"
-      },
-      {
         "ancmId": "020594",
         "ancmPrg": "ancmIng",
         "title": "2026년도 글로벌기업산업기술연계R&D 사업 신규지원 대상과제 공고",
@@ -154,18 +164,6 @@
         "applyPeriod": "2026-04-06 ~ 2026-06-12",
         "applyStartDate": "2026-04-06",
         "applyEndDate": "2026-06-12"
-      },
-      {
-        "ancmId": "020288",
-        "ancmPrg": "ancmIng",
-        "title": "(강원6) 2026년 지역 혁신 실증 스케일업(다년도)",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020288&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "실증"
-        ],
-        "applyPeriod": "2026-05-04 ~ 2026-05-15",
-        "applyStartDate": "2026-05-04",
-        "applyEndDate": "2026-05-15"
       },
       {
         "ancmId": "020214",
@@ -181,6 +179,19 @@
       }
     ],
     "itemsAllMatched": [
+      {
+        "ancmId": "020774",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 개도국기후기술실증연구 사업 신규과제 재공모",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "실증"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-05-22",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-05-22",
+        "source": "iris"
+      },
       {
         "ancmId": "021357",
         "ancmPrg": "ancmIng",
@@ -205,6 +216,45 @@
         "applyPeriod": "2026-05-07 ~ 2026-05-29",
         "applyStartDate": "2026-05-07",
         "applyEndDate": "2026-05-29",
+        "source": "iris"
+      },
+      {
+        "ancmId": "021337",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_자유품목) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021337&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01",
+        "source": "iris"
+      },
+      {
+        "ancmId": "021336",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_수요품목) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021336&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01",
+        "source": "iris"
+      },
+      {
+        "ancmId": "021334",
+        "ancmPrg": "ancmIng",
+        "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(자유공모형_일반) 제2차 시행계획 공고",
+        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021334&ancmPrg=ancmIng",
+        "matchedKeywords": [
+          "R&D"
+        ],
+        "applyPeriod": "2026-05-13 ~ 2026-06-01",
+        "applyStartDate": "2026-05-13",
+        "applyEndDate": "2026-06-01",
         "source": "iris"
       },
       {
@@ -248,47 +298,6 @@
         "source": "iris"
       },
       {
-        "ancmId": "020774",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 개도국기후기술실증연구 사업 신규과제 공모",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "실증"
-        ],
-        "applyPeriod": "2026-04-10 ~ 2026-05-12",
-        "applyStartDate": "2026-04-10",
-        "applyEndDate": "2026-05-12",
-        "source": "iris"
-      },
-      {
-        "ancmId": "020554",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 한국형Manufacturing-X플랫폼표준모델개발및실증(R&D) 신규지원 대상과제 공고",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020554&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "플랫폼",
-          "R&D",
-          "실증"
-        ],
-        "applyPeriod": "2026-04-10 ~ 2026-05-11",
-        "applyStartDate": "2026-04-10",
-        "applyEndDate": "2026-05-11",
-        "source": "iris"
-      },
-      {
-        "ancmId": "020533",
-        "ancmPrg": "ancmIng",
-        "title": "2026년도 중소기업기술혁신개발사업 '중소기업유망기술개발(구조혁신R&D)' 하반기 1차 시행계획 공고",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020533&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "R&D"
-        ],
-        "applyPeriod": "2026-04-23 ~ 2026-05-11",
-        "applyStartDate": "2026-04-23",
-        "applyEndDate": "2026-05-11",
-        "source": "iris"
-      },
-      {
         "ancmId": "020594",
         "ancmPrg": "ancmIng",
         "title": "2026년도 글로벌기업산업기술연계R&D 사업 신규지원 대상과제 공고",
@@ -299,19 +308,6 @@
         "applyPeriod": "2026-04-06 ~ 2026-06-12",
         "applyStartDate": "2026-04-06",
         "applyEndDate": "2026-06-12",
-        "source": "iris"
-      },
-      {
-        "ancmId": "020288",
-        "ancmPrg": "ancmIng",
-        "title": "(강원6) 2026년 지역 혁신 실증 스케일업(다년도)",
-        "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020288&ancmPrg=ancmIng",
-        "matchedKeywords": [
-          "실증"
-        ],
-        "applyPeriod": "2026-05-04 ~ 2026-05-15",
-        "applyStartDate": "2026-05-04",
-        "applyEndDate": "2026-05-15",
         "source": "iris"
       },
       {
@@ -332,7 +328,7 @@
   "ntis": {
     "source": "ntis",
     "listUrl": "https://www.ntis.go.kr/rndgate/eg/un/ra/mng.do",
-    "fetchedAt": "2026-05-10T06:10:09.441Z",
+    "fetchedAt": "2026-05-16T15:51:33.676Z",
     "keywords": [
       "해양",
       "수산",
@@ -374,8 +370,8 @@
     ],
     "ministryOrKeyword": true,
     "maxPages": 6,
-    "totalCollected": 17,
-    "matchedCount": 14,
+    "totalCollected": 15,
+    "matchedCount": 9,
     "items": [
       {
         "source": "ntis",
@@ -386,7 +382,7 @@
         "applyPeriod": "2026-05-08 ~ 2026-05-18",
         "applyStartDate": "2026-05-08",
         "applyEndDate": "2026-05-18",
-        "ddayLabel": "D - 8",
+        "ddayLabel": "D - 2",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265686&flag=rndList"
       },
@@ -399,7 +395,7 @@
         "applyPeriod": "2026-05-08 ~ 2026-05-18",
         "applyStartDate": "2026-05-08",
         "applyEndDate": "2026-05-18",
-        "ddayLabel": "D - 8",
+        "ddayLabel": "D - 2",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265684&flag=rndList"
       },
@@ -412,51 +408,9 @@
         "applyPeriod": "2026-04-17 ~ 2026-05-19",
         "applyStartDate": "2026-04-17",
         "applyEndDate": "2026-05-19",
-        "ddayLabel": "D - 9",
+        "ddayLabel": "D - 3",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1262378&flag=rndList"
-      },
-      {
-        "source": "ntis",
-        "roRndUid": "1261890",
-        "title": "2028년 국가연구개발사업(오션랩3.0) 신규과제 기술수요조사 안내",
-        "ministry": "해양경찰청",
-        "status": "접수중",
-        "applyPeriod": "2026-04-15 ~ 2026-05-15",
-        "applyStartDate": "2026-04-15",
-        "applyEndDate": "2026-05-15",
-        "ddayLabel": "D - 5",
-        "matchedKeywords": [
-          "조사",
-          "오션"
-        ],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261890&flag=rndList"
-      },
-      {
-        "source": "ntis",
-        "roRndUid": "1261647",
-        "title": "2026년 산학연 연계 중소벤처 RBD 지원사업(STEP 4)",
-        "ministry": "과학기술정보통신부",
-        "status": "접수중",
-        "applyPeriod": "2026-04-14 ~ 2026-05-14",
-        "applyStartDate": "2026-04-14",
-        "applyEndDate": "2026-05-14",
-        "ddayLabel": "D - 4",
-        "matchedKeywords": [],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261647&flag=rndList"
-      },
-      {
-        "source": "ntis",
-        "roRndUid": "1260361",
-        "title": "2026년 AI 기반 대학 과학기술 혁신사업(중앙거점) 신규과제 공모",
-        "ministry": "과학기술정보통신부",
-        "status": "접수중",
-        "applyPeriod": "2026-04-28 ~ 2026-05-12",
-        "applyStartDate": "2026-04-28",
-        "applyEndDate": "2026-05-12",
-        "ddayLabel": "D - 2",
-        "matchedKeywords": [],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260361&flag=rndList"
       },
       {
         "source": "ntis",
@@ -467,48 +421,22 @@
         "applyPeriod": "2026-05-07 ~ 2026-05-22",
         "applyStartDate": "2026-05-07",
         "applyEndDate": "2026-05-22",
-        "ddayLabel": "D-12",
+        "ddayLabel": "D - 6",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260360&flag=rndList"
       },
       {
         "source": "ntis",
-        "roRndUid": "1259254",
-        "title": "(강원3) 2026년 전략기술 연구성과 사업화(다년도)",
+        "roRndUid": "1260022",
+        "title": "2026년도 한-프랑스(ANR) 공동연구사업 신규과제 공모",
         "ministry": "과학기술정보통신부",
         "status": "접수중",
-        "applyPeriod": "2026-05-04 ~ 2026-05-15",
-        "applyStartDate": "2026-05-04",
-        "applyEndDate": "2026-05-15",
-        "ddayLabel": "D - 5",
+        "applyPeriod": "2026-05-11 ~ 2026-06-04",
+        "applyStartDate": "2026-05-11",
+        "applyEndDate": "2026-06-04",
+        "ddayLabel": "D-19",
         "matchedKeywords": [],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259254&flag=rndList"
-      },
-      {
-        "source": "ntis",
-        "roRndUid": "1259664",
-        "title": "2026년도 국내 글로벌 석학 연구역량 활용 지원사업 신규과제 공모",
-        "ministry": "과학기술정보통신부",
-        "status": "접수중",
-        "applyPeriod": "2026-04-27 ~ 2026-05-15",
-        "applyStartDate": "2026-04-27",
-        "applyEndDate": "2026-05-15",
-        "ddayLabel": "D - 5",
-        "matchedKeywords": [],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259664&flag=rndList"
-      },
-      {
-        "source": "ntis",
-        "roRndUid": "1257976",
-        "title": "2026년도 한미 전략기술 선행표준화 공동연구사업(美 NIST 협력사업) 신규과제 공모",
-        "ministry": "과학기술정보통신부",
-        "status": "접수중",
-        "applyPeriod": "2026-03-06 ~ 2026-05-11",
-        "applyStartDate": "2026-03-06",
-        "applyEndDate": "2026-05-11",
-        "ddayLabel": "D - 1",
-        "matchedKeywords": [],
-        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257976&flag=rndList"
+        "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260022&flag=rndList"
       },
       {
         "source": "ntis",
@@ -519,7 +447,7 @@
         "applyPeriod": "2026-03-04 ~ 2026-05-21",
         "applyStartDate": "2026-03-04",
         "applyEndDate": "2026-05-21",
-        "ddayLabel": "D-11",
+        "ddayLabel": "D - 5",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257763&flag=rndList"
       },
@@ -531,7 +459,7 @@
         "status": "접수중",
         "applyPeriod": "2026.02.10 ~ 2060.03.04",
         "dateParseNote": "목록 날짜 이상치 무시(원문: 2026.02.10 ~ 2060.03.04)",
-        "ddayLabel": "D-12352",
+        "ddayLabel": "D-12346",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1255958&flag=rndList"
       },
@@ -544,7 +472,7 @@
         "applyPeriod": "2026-05-04 ~ 2026-05-20",
         "applyStartDate": "2026-05-04",
         "applyEndDate": "2026-05-20",
-        "ddayLabel": "D-10",
+        "ddayLabel": "D - 4",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253807&flag=rndList"
       },
@@ -557,7 +485,7 @@
         "applyPeriod": "2025-11-24 ~ 2026-12-23",
         "applyStartDate": "2025-11-24",
         "applyEndDate": "2026-12-23",
-        "ddayLabel": "D-227",
+        "ddayLabel": "D-221",
         "matchedKeywords": [],
         "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253341&flag=rndList"
       }
@@ -574,7 +502,7 @@
       "applyPeriod": "2026-05-08 ~ 2026-05-18",
       "applyStartDate": "2026-05-08",
       "applyEndDate": "2026-05-18",
-      "ddayLabel": "D - 8",
+      "ddayLabel": "D - 2",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265686&flag=rndList"
     },
@@ -587,7 +515,7 @@
       "applyPeriod": "2026-05-08 ~ 2026-05-18",
       "applyStartDate": "2026-05-08",
       "applyEndDate": "2026-05-18",
-      "ddayLabel": "D - 8",
+      "ddayLabel": "D - 2",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265684&flag=rndList"
     },
@@ -600,51 +528,9 @@
       "applyPeriod": "2026-04-17 ~ 2026-05-19",
       "applyStartDate": "2026-04-17",
       "applyEndDate": "2026-05-19",
-      "ddayLabel": "D - 9",
+      "ddayLabel": "D - 3",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1262378&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1261890",
-      "title": "2028년 국가연구개발사업(오션랩3.0) 신규과제 기술수요조사 안내",
-      "ministry": "해양경찰청",
-      "status": "접수중",
-      "applyPeriod": "2026-04-15 ~ 2026-05-15",
-      "applyStartDate": "2026-04-15",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
-      "matchedKeywords": [
-        "조사",
-        "오션"
-      ],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261890&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1261647",
-      "title": "2026년 산학연 연계 중소벤처 RBD 지원사업(STEP 4)",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-14 ~ 2026-05-14",
-      "applyStartDate": "2026-04-14",
-      "applyEndDate": "2026-05-14",
-      "ddayLabel": "D - 4",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261647&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1260361",
-      "title": "2026년 AI 기반 대학 과학기술 혁신사업(중앙거점) 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-28 ~ 2026-05-12",
-      "applyStartDate": "2026-04-28",
-      "applyEndDate": "2026-05-12",
-      "ddayLabel": "D - 2",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260361&flag=rndList"
     },
     {
       "source": "ntis",
@@ -655,48 +541,22 @@
       "applyPeriod": "2026-05-07 ~ 2026-05-22",
       "applyStartDate": "2026-05-07",
       "applyEndDate": "2026-05-22",
-      "ddayLabel": "D-12",
+      "ddayLabel": "D - 6",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260360&flag=rndList"
     },
     {
       "source": "ntis",
-      "roRndUid": "1259254",
-      "title": "(강원3) 2026년 전략기술 연구성과 사업화(다년도)",
+      "roRndUid": "1260022",
+      "title": "2026년도 한-프랑스(ANR) 공동연구사업 신규과제 공모",
       "ministry": "과학기술정보통신부",
       "status": "접수중",
-      "applyPeriod": "2026-05-04 ~ 2026-05-15",
-      "applyStartDate": "2026-05-04",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
+      "applyPeriod": "2026-05-11 ~ 2026-06-04",
+      "applyStartDate": "2026-05-11",
+      "applyEndDate": "2026-06-04",
+      "ddayLabel": "D-19",
       "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259254&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1259664",
-      "title": "2026년도 국내 글로벌 석학 연구역량 활용 지원사업 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-27 ~ 2026-05-15",
-      "applyStartDate": "2026-04-27",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259664&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1257976",
-      "title": "2026년도 한미 전략기술 선행표준화 공동연구사업(美 NIST 협력사업) 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-03-06 ~ 2026-05-11",
-      "applyStartDate": "2026-03-06",
-      "applyEndDate": "2026-05-11",
-      "ddayLabel": "D - 1",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257976&flag=rndList"
+      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260022&flag=rndList"
     },
     {
       "source": "ntis",
@@ -707,7 +567,7 @@
       "applyPeriod": "2026-03-04 ~ 2026-05-21",
       "applyStartDate": "2026-03-04",
       "applyEndDate": "2026-05-21",
-      "ddayLabel": "D-11",
+      "ddayLabel": "D - 5",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257763&flag=rndList"
     },
@@ -719,7 +579,7 @@
       "status": "접수중",
       "applyPeriod": "2026.02.10 ~ 2060.03.04",
       "dateParseNote": "목록 날짜 이상치 무시(원문: 2026.02.10 ~ 2060.03.04)",
-      "ddayLabel": "D-12352",
+      "ddayLabel": "D-12346",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1255958&flag=rndList"
     },
@@ -732,7 +592,7 @@
       "applyPeriod": "2026-05-04 ~ 2026-05-20",
       "applyStartDate": "2026-05-04",
       "applyEndDate": "2026-05-20",
-      "ddayLabel": "D-10",
+      "ddayLabel": "D - 4",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253807&flag=rndList"
     },
@@ -745,9 +605,22 @@
       "applyPeriod": "2025-11-24 ~ 2026-12-23",
       "applyStartDate": "2025-11-24",
       "applyEndDate": "2026-12-23",
-      "ddayLabel": "D-227",
+      "ddayLabel": "D-221",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253341&flag=rndList"
+    },
+    {
+      "ancmId": "020774",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 개도국기후기술실증연구 사업 신규과제 재공모",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "실증"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-05-22",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-05-22",
+      "source": "iris"
     },
     {
       "ancmId": "021357",
@@ -773,6 +646,45 @@
       "applyPeriod": "2026-05-07 ~ 2026-05-29",
       "applyStartDate": "2026-05-07",
       "applyEndDate": "2026-05-29",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021337",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_자유품목) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021337&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021336",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_수요품목) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021336&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021334",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(자유공모형_일반) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021334&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
       "source": "iris"
     },
     {
@@ -816,47 +728,6 @@
       "source": "iris"
     },
     {
-      "ancmId": "020774",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 개도국기후기술실증연구 사업 신규과제 공모",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "실증"
-      ],
-      "applyPeriod": "2026-04-10 ~ 2026-05-12",
-      "applyStartDate": "2026-04-10",
-      "applyEndDate": "2026-05-12",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020554",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 한국형Manufacturing-X플랫폼표준모델개발및실증(R&D) 신규지원 대상과제 공고",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020554&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "플랫폼",
-        "R&D",
-        "실증"
-      ],
-      "applyPeriod": "2026-04-10 ~ 2026-05-11",
-      "applyStartDate": "2026-04-10",
-      "applyEndDate": "2026-05-11",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020533",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 중소기업기술혁신개발사업 '중소기업유망기술개발(구조혁신R&D)' 하반기 1차 시행계획 공고",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020533&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "R&D"
-      ],
-      "applyPeriod": "2026-04-23 ~ 2026-05-11",
-      "applyStartDate": "2026-04-23",
-      "applyEndDate": "2026-05-11",
-      "source": "iris"
-    },
-    {
       "ancmId": "020594",
       "ancmPrg": "ancmIng",
       "title": "2026년도 글로벌기업산업기술연계R&D 사업 신규지원 대상과제 공고",
@@ -867,19 +738,6 @@
       "applyPeriod": "2026-04-06 ~ 2026-06-12",
       "applyStartDate": "2026-04-06",
       "applyEndDate": "2026-06-12",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020288",
-      "ancmPrg": "ancmIng",
-      "title": "(강원6) 2026년 지역 혁신 실증 스케일업(다년도)",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020288&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "실증"
-      ],
-      "applyPeriod": "2026-05-04 ~ 2026-05-15",
-      "applyStartDate": "2026-05-04",
-      "applyEndDate": "2026-05-15",
       "source": "iris"
     },
     {
@@ -896,8 +754,8 @@
       "source": "iris"
     }
   ],
-  "totalCollectedIris": 69,
-  "totalCollectedNtis": 17,
+  "totalCollectedIris": 62,
+  "totalCollectedNtis": 15,
   "totalCollectedSmes": 0,
   "items": [
     {
@@ -909,7 +767,7 @@
       "applyPeriod": "2026-05-08 ~ 2026-05-18",
       "applyStartDate": "2026-05-08",
       "applyEndDate": "2026-05-18",
-      "ddayLabel": "D - 8",
+      "ddayLabel": "D - 2",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265686&flag=rndList"
     },
@@ -922,7 +780,7 @@
       "applyPeriod": "2026-05-08 ~ 2026-05-18",
       "applyStartDate": "2026-05-08",
       "applyEndDate": "2026-05-18",
-      "ddayLabel": "D - 8",
+      "ddayLabel": "D - 2",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1265684&flag=rndList"
     },
@@ -935,51 +793,9 @@
       "applyPeriod": "2026-04-17 ~ 2026-05-19",
       "applyStartDate": "2026-04-17",
       "applyEndDate": "2026-05-19",
-      "ddayLabel": "D - 9",
+      "ddayLabel": "D - 3",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1262378&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1261890",
-      "title": "2028년 국가연구개발사업(오션랩3.0) 신규과제 기술수요조사 안내",
-      "ministry": "해양경찰청",
-      "status": "접수중",
-      "applyPeriod": "2026-04-15 ~ 2026-05-15",
-      "applyStartDate": "2026-04-15",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
-      "matchedKeywords": [
-        "조사",
-        "오션"
-      ],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261890&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1261647",
-      "title": "2026년 산학연 연계 중소벤처 RBD 지원사업(STEP 4)",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-14 ~ 2026-05-14",
-      "applyStartDate": "2026-04-14",
-      "applyEndDate": "2026-05-14",
-      "ddayLabel": "D - 4",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1261647&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1260361",
-      "title": "2026년 AI 기반 대학 과학기술 혁신사업(중앙거점) 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-28 ~ 2026-05-12",
-      "applyStartDate": "2026-04-28",
-      "applyEndDate": "2026-05-12",
-      "ddayLabel": "D - 2",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260361&flag=rndList"
     },
     {
       "source": "ntis",
@@ -990,48 +806,22 @@
       "applyPeriod": "2026-05-07 ~ 2026-05-22",
       "applyStartDate": "2026-05-07",
       "applyEndDate": "2026-05-22",
-      "ddayLabel": "D-12",
+      "ddayLabel": "D - 6",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260360&flag=rndList"
     },
     {
       "source": "ntis",
-      "roRndUid": "1259254",
-      "title": "(강원3) 2026년 전략기술 연구성과 사업화(다년도)",
+      "roRndUid": "1260022",
+      "title": "2026년도 한-프랑스(ANR) 공동연구사업 신규과제 공모",
       "ministry": "과학기술정보통신부",
       "status": "접수중",
-      "applyPeriod": "2026-05-04 ~ 2026-05-15",
-      "applyStartDate": "2026-05-04",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
+      "applyPeriod": "2026-05-11 ~ 2026-06-04",
+      "applyStartDate": "2026-05-11",
+      "applyEndDate": "2026-06-04",
+      "ddayLabel": "D-19",
       "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259254&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1259664",
-      "title": "2026년도 국내 글로벌 석학 연구역량 활용 지원사업 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-04-27 ~ 2026-05-15",
-      "applyStartDate": "2026-04-27",
-      "applyEndDate": "2026-05-15",
-      "ddayLabel": "D - 5",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1259664&flag=rndList"
-    },
-    {
-      "source": "ntis",
-      "roRndUid": "1257976",
-      "title": "2026년도 한미 전략기술 선행표준화 공동연구사업(美 NIST 협력사업) 신규과제 공모",
-      "ministry": "과학기술정보통신부",
-      "status": "접수중",
-      "applyPeriod": "2026-03-06 ~ 2026-05-11",
-      "applyStartDate": "2026-03-06",
-      "applyEndDate": "2026-05-11",
-      "ddayLabel": "D - 1",
-      "matchedKeywords": [],
-      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257976&flag=rndList"
+      "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1260022&flag=rndList"
     },
     {
       "source": "ntis",
@@ -1042,7 +832,7 @@
       "applyPeriod": "2026-03-04 ~ 2026-05-21",
       "applyStartDate": "2026-03-04",
       "applyEndDate": "2026-05-21",
-      "ddayLabel": "D-11",
+      "ddayLabel": "D - 5",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1257763&flag=rndList"
     },
@@ -1054,7 +844,7 @@
       "status": "접수중",
       "applyPeriod": "2026.02.10 ~ 2060.03.04",
       "dateParseNote": "목록 날짜 이상치 무시(원문: 2026.02.10 ~ 2060.03.04)",
-      "ddayLabel": "D-12352",
+      "ddayLabel": "D-12346",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1255958&flag=rndList"
     },
@@ -1067,7 +857,7 @@
       "applyPeriod": "2026-05-04 ~ 2026-05-20",
       "applyStartDate": "2026-05-04",
       "applyEndDate": "2026-05-20",
-      "ddayLabel": "D-10",
+      "ddayLabel": "D - 4",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253807&flag=rndList"
     },
@@ -1080,9 +870,22 @@
       "applyPeriod": "2025-11-24 ~ 2026-12-23",
       "applyStartDate": "2025-11-24",
       "applyEndDate": "2026-12-23",
-      "ddayLabel": "D-227",
+      "ddayLabel": "D-221",
       "matchedKeywords": [],
       "url": "https://www.ntis.go.kr/rndgate/eg/un/ra/view.do?roRndUid=1253341&flag=rndList"
+    },
+    {
+      "ancmId": "020774",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 개도국기후기술실증연구 사업 신규과제 재공모",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "실증"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-05-22",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-05-22",
+      "source": "iris"
     },
     {
       "ancmId": "021357",
@@ -1108,6 +911,45 @@
       "applyPeriod": "2026-05-07 ~ 2026-05-29",
       "applyStartDate": "2026-05-07",
       "applyEndDate": "2026-05-29",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021337",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_자유품목) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021337&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021336",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(에코브릿지_수요품목) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021336&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
+      "source": "iris"
+    },
+    {
+      "ancmId": "021334",
+      "ancmPrg": "ancmIng",
+      "title": "2026년도 중소기업기술혁신개발사업 글로벌협력형R&D(자유공모형_일반) 제2차 시행계획 공고",
+      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=021334&ancmPrg=ancmIng",
+      "matchedKeywords": [
+        "R&D"
+      ],
+      "applyPeriod": "2026-05-13 ~ 2026-06-01",
+      "applyStartDate": "2026-05-13",
+      "applyEndDate": "2026-06-01",
       "source": "iris"
     },
     {
@@ -1151,47 +993,6 @@
       "source": "iris"
     },
     {
-      "ancmId": "020774",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 개도국기후기술실증연구 사업 신규과제 공모",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020774&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "실증"
-      ],
-      "applyPeriod": "2026-04-10 ~ 2026-05-12",
-      "applyStartDate": "2026-04-10",
-      "applyEndDate": "2026-05-12",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020554",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 한국형Manufacturing-X플랫폼표준모델개발및실증(R&D) 신규지원 대상과제 공고",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020554&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "플랫폼",
-        "R&D",
-        "실증"
-      ],
-      "applyPeriod": "2026-04-10 ~ 2026-05-11",
-      "applyStartDate": "2026-04-10",
-      "applyEndDate": "2026-05-11",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020533",
-      "ancmPrg": "ancmIng",
-      "title": "2026년도 중소기업기술혁신개발사업 '중소기업유망기술개발(구조혁신R&D)' 하반기 1차 시행계획 공고",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020533&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "R&D"
-      ],
-      "applyPeriod": "2026-04-23 ~ 2026-05-11",
-      "applyStartDate": "2026-04-23",
-      "applyEndDate": "2026-05-11",
-      "source": "iris"
-    },
-    {
       "ancmId": "020594",
       "ancmPrg": "ancmIng",
       "title": "2026년도 글로벌기업산업기술연계R&D 사업 신규지원 대상과제 공고",
@@ -1202,19 +1003,6 @@
       "applyPeriod": "2026-04-06 ~ 2026-06-12",
       "applyStartDate": "2026-04-06",
       "applyEndDate": "2026-06-12",
-      "source": "iris"
-    },
-    {
-      "ancmId": "020288",
-      "ancmPrg": "ancmIng",
-      "title": "(강원6) 2026년 지역 혁신 실증 스케일업(다년도)",
-      "url": "https://www.iris.go.kr/contents/retrieveBsnsAncmView.do?ancmId=020288&ancmPrg=ancmIng",
-      "matchedKeywords": [
-        "실증"
-      ],
-      "applyPeriod": "2026-05-04 ~ 2026-05-15",
-      "applyStartDate": "2026-05-04",
-      "applyEndDate": "2026-05-15",
       "source": "iris"
     },
     {
@@ -1231,12 +1019,12 @@
       "source": "iris"
     }
   ],
-  "matchedCount": 25,
-  "matchedCountBeforeDeadline": 25,
+  "matchedCount": 20,
+  "matchedCountBeforeDeadline": 20,
   "deadlineExcludedCount": 0,
   "deadlineExcluded": [],
   "deadlineFilter": {
-    "today": "2026-05-10",
+    "today": "2026-05-17",
     "dropUnparsedDeadline": false
   }
 }
