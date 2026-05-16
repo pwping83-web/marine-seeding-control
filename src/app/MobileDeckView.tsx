@@ -48,6 +48,7 @@ import {
 } from "@/lib/kma-weather";
 import { analyzeWeatherWithGroq, isGroqConfigured } from "@/lib/groq-weather";
 import { buildLocalWorkRecommendation } from "@/lib/work-recommendation";
+import { resolveGpsHeadingDeg } from "@/lib/geo-bearing";
 import { endOfDayMs, startOfDayMs, ymdLocal } from "@/lib/seeding-day-eval";
 
 const VESSEL_DEFAULT = "제3해양살포함";
@@ -83,14 +84,47 @@ function canUseBrowserGeolocation(): boolean {
   return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
 }
 
-function posFromGeolocationCoords(c: GeolocationCoordinates): {
-  lat: number;
-  lng: number;
-  heading: number;
-} {
-  const h = c.heading;
-  const heading = typeof h === "number" && !Number.isNaN(h) ? h : 0;
-  return { lat: c.latitude, lng: c.longitude, heading };
+function mobileOwnshipDivIcon(heading: number, seedingActive: boolean) {
+  const pinCls = seedingActive
+    ? "marine-gps-ownship-pin marine-gps-ownship-pin--seeding"
+    : "marine-gps-ownship-pin";
+  return L.divIcon({
+    className: "marine-gps-ownship-divicon",
+    html: `<div class="${pinCls}" style="transform:rotate(${heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div>`,
+    iconSize: [32, 40],
+    iconAnchor: [16, 20],
+  });
+}
+
+/** Leaflet: heading 갱신 시 divIcon HTML이 안 바뀌는 경우가 있어 setIcon 으로 동기화 */
+function MobileDeckOwnshipMarker({
+  pos,
+  seedingActive,
+}: {
+  pos: { lat: number; lng: number; heading: number };
+  seedingActive: boolean;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+  const icon = useMemo(
+    () => mobileOwnshipDivIcon(pos.heading, seedingActive),
+    [pos.heading, seedingActive],
+  );
+
+  useEffect(() => {
+    markerRef.current?.setIcon(icon);
+  }, [icon]);
+
+  return (
+    <Marker
+      ref={(m) => {
+        markerRef.current = m;
+        m?.setIcon(icon);
+      }}
+      position={[pos.lat, pos.lng]}
+      icon={icon}
+      zIndexOffset={900}
+    />
+  );
 }
 
 function MapFollowUser({
@@ -275,6 +309,8 @@ export default function MobileDeckView() {
   const [groqSummary, setGroqSummary] = useState("");
   const groqTickerLastRef = useRef(0);
   const firstGpsCenterRef = useRef(false);
+  const geoPrevRef = useRef<{ lat: number; lng: number } | null>(null);
+  const geoHeadingRef = useRef(0);
   /** 함정 화면에서 센서 트리거 시뮬 시 라벨 순번 (세션 단위) */
   const manualDropSeqRef = useRef(0);
   const [sessionDrops, setSessionDrops] = useState<SeedDropInput[]>([]);
@@ -287,6 +323,18 @@ export default function MobileDeckView() {
   );
 
   const kakaoJsKey = import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY?.trim() ?? "";
+  /** 관제 `MarineLeafletMap` 과 동일 — JS 키 있으면 카카오, 없거나 `VITE_MOBILE_DECK_MAP=leaflet` 이면 타일 */
+  const mobileMapUseKakao =
+    Boolean(kakaoJsKey) &&
+    (import.meta.env.VITE_MOBILE_DECK_MAP?.trim().toLowerCase() ?? "") !== "leaflet";
+
+  const applyGeolocationCoords = useCallback((coords: GeolocationCoordinates) => {
+    const heading = resolveGpsHeadingDeg(coords, geoPrevRef.current, geoHeadingRef.current);
+    geoHeadingRef.current = heading;
+    geoPrevRef.current = { lat: coords.latitude, lng: coords.longitude };
+    setGeoErr(null);
+    setPos({ lat: coords.latitude, lng: coords.longitude, heading });
+  }, []);
 
   const weatherNowcastNote = useMemo(() => {
     if (isKmaApiConfigured()) return "지금: 단기예보 동기화(주기 갱신)";
@@ -373,8 +421,7 @@ export default function MobileDeckView() {
     let cancelled = false;
     const applyCoords = (c: GeolocationCoordinates) => {
       if (cancelled) return;
-      setGeoErr(null);
-      setPos(posFromGeolocationCoords(c));
+      applyGeolocationCoords(c);
       if (!firstGpsCenterRef.current) {
         firstGpsCenterRef.current = true;
         setRecenterNonce((n) => n + 1);
@@ -401,7 +448,7 @@ export default function MobileDeckView() {
       cancelled = true;
       navigator.geolocation.clearWatch(watchId);
     };
-  }, []);
+  }, [applyGeolocationCoords]);
 
   const requestLocateNow = useCallback(() => {
     if (!canUseBrowserGeolocation()) {
@@ -415,8 +462,7 @@ export default function MobileDeckView() {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (p) => {
-        setGeoErr(null);
-        setPos(posFromGeolocationCoords(p.coords));
+        applyGeolocationCoords(p.coords);
         setRecenterNonce((n) => n + 1);
         setLocating(false);
       },
@@ -426,7 +472,7 @@ export default function MobileDeckView() {
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 45_000 },
     );
-  }, []);
+  }, [applyGeolocationCoords]);
 
   useEffect(() => {
     void refreshTodayCount();
@@ -649,18 +695,6 @@ export default function MobileDeckView() {
   const padIconShell =
     "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-white/12";
 
-  const ownShipIcon = useMemo(() => {
-    if (!pos) return null;
-    const pinCls = seedingActive
-      ? "marine-gps-ownship-pin marine-gps-ownship-pin--seeding"
-      : "marine-gps-ownship-pin";
-    return L.divIcon({
-      className: "marine-gps-ownship-divicon",
-      html: `<div class="${pinCls}" style="transform:rotate(${pos.heading}deg)"><div class="marine-gps-ownship-signals" aria-hidden="true"><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span><span class="marine-gps-ownship-ring"></span></div><div class="marine-gps-ownship-hull"></div></div>`,
-      iconSize: [32, 40],
-      iconAnchor: [16, 20],
-    });
-  }, [pos, seedingActive]);
 
   return (
     <div className="flex h-svh min-h-0 flex-col bg-[#050f18] text-slate-100">
@@ -717,7 +751,7 @@ export default function MobileDeckView() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        {kakaoJsKey ? (
+        {mobileMapUseKakao ? (
           <MobileDeckKakaoMap
             appkey={kakaoJsKey}
             center={center}
@@ -774,9 +808,9 @@ export default function MobileDeckView() {
                 </CircleMarker>
               );
             })}
-            {pos && ownShipIcon ? (
+            {pos ? (
               <>
-                <Marker position={[pos.lat, pos.lng]} icon={ownShipIcon} zIndexOffset={900} />
+                <MobileDeckOwnshipMarker pos={pos} seedingActive={seedingActive} />
                 <MapFollowUser lat={pos.lat} lng={pos.lng} zoom={15} recenterNonce={recenterNonce} />
               </>
             ) : null}
