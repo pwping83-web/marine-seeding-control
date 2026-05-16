@@ -1,0 +1,599 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>이앤엑스(ENX) 해양 종자 살포 스마트 관제 솔루션</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #0a2540;
+      --blue: #1a73e8;
+      --red: #d93025;
+      --yellow: #fbbc04;
+      --gray: #e2e8f0;
+      --bg-light: #f8fafc;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+      background-color: #555;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .print-hint {
+      text-align: center;
+      padding: 10px;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .print-hint button {
+      padding: 8px 16px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    /* A4 프레임 강제 고정 */
+    .a4-page {
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      background: #fff;
+      margin: 10px auto;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 헤더 영역 */
+    .header {
+      background: var(--navy);
+      color: #fff;
+      padding: 12mm 15mm 9mm;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .tag {
+      display: inline-block;
+      background: var(--blue);
+      color: #fff;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 11px;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .title {
+      font-size: 26px;
+      font-weight: 900;
+      margin: 0 0 6px;
+      line-height: 1.3;
+      letter-spacing: -1px;
+    }
+
+    .title span {
+      color: var(--yellow);
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #a8c7fa;
+      margin: 0;
+      font-weight: 400;
+      line-height: 1.4;
+    }
+
+    /* 본문 영역 */
+    .content {
+      padding: 8mm 15mm;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* 1. 방식 비교 컨테이너 */
+    .vs-container {
+      display: flex;
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+      flex-shrink: 0;
+      border: 1px solid var(--gray);
+    }
+
+    .vs-box {
+      flex: 1;
+      padding: 12px 16px;
+    }
+
+    .vs-box.old {
+      background: #fff5f5;
+      border-top: 4px solid var(--red);
+      border-right: 1px solid var(--gray);
+    }
+
+    .vs-box.new {
+      background: #f0fdf4;
+      border-top: 4px solid var(--blue);
+    }
+
+    .vs-title {
+      font-size: 13px;
+      font-weight: 900;
+      margin: 0 0 8px 0;
+    }
+
+    .old .vs-title {
+      color: var(--red);
+    }
+
+    .new .vs-title {
+      color: var(--blue);
+    }
+
+    .vs-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 11.5px;
+      line-height: 1.5;
+      font-weight: 700;
+    }
+
+    .vs-list li {
+      margin-bottom: 5px;
+      padding-left: 16px;
+      position: relative;
+      word-break: keep-all;
+    }
+
+    .vs-list li:last-child {
+      margin-bottom: 0;
+    }
+
+    .old .vs-list li::before {
+      content: "✕";
+      position: absolute;
+      left: 0;
+      color: var(--red);
+      font-weight: 900;
+    }
+
+    .new .vs-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    /* 2. 대시보드 그래픽 영역 */
+    .product-visual {
+      width: 100%;
+      border: 2px solid var(--navy);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      position: relative;
+      flex-shrink: 0;
+      margin: 0;
+      background: #0f172a;
+    }
+
+    .product-visual img {
+      width: 100%;
+      height: 75mm;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    .visual-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(10, 37, 64, 0.85);
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    /* 3. 실증 배너 (로고를 배제하고 하드웨어 아이콘으로 최종 반영) */
+    .poc-banner {
+      width: 100%;
+      background: linear-gradient(135deg, var(--yellow) 0%, #f57f17 100%);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: #000;
+      box-shadow: 0 4px 12px rgba(251, 188, 4, 0.2);
+      flex-shrink: 0;
+    }
+
+    .poc-icon {
+      font-size: 26px;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-left: 5px;
+    }
+
+    .poc-text {
+      flex: 1;
+      margin-left: 5px;
+    }
+
+    .poc-text h3 {
+      font-size: 14.5px;
+      font-weight: 900;
+      margin: 0 0 3px 0;
+      letter-spacing: -0.3px;
+    }
+
+    .poc-text p {
+      font-size: 11.5px;
+      margin: 0;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    /* 4. 핵심 역량 4그리드 */
+    .grid-4 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+      flex-shrink: 0;
+    }
+
+    .feature-card {
+      background: #fff;
+      border: 1px solid var(--gray);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+    }
+
+    .f-icon {
+      background: #e8f0fe;
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .f-text {
+      flex: 1;
+    }
+
+    .f-text h4 {
+      margin: 0 0 2px 0;
+      font-size: 12.5px;
+      font-weight: 900;
+      color: var(--navy);
+    }
+
+    .f-text p {
+      margin: 0;
+      font-size: 11px;
+      color: #555;
+      line-height: 1.4;
+      word-break: keep-all;
+      font-weight: 500;
+    }
+
+    /* 5. 하단 협력 가이드라인 */
+    .equip-line {
+      width: 100%;
+      flex-shrink: 0;
+      margin: 2px 0 0 0;
+      padding: 8px 12px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--navy);
+      background: var(--bg-light);
+      border: 1px solid #d2e3fc;
+      border-radius: 6px;
+    }
+
+    .equip-line em {
+      font-style: normal;
+      font-weight: 900;
+      color: var(--blue);
+    }
+
+    /* 푸터 영역 */
+    .footer {
+      background: var(--navy);
+      color: #fff;
+      padding: 8mm 15mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      flex-shrink: 0;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .footer-logo-img {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .company-info h2 {
+      margin: 0 0 2px 0;
+      font-size: 14px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+
+    .company-info .rep {
+      margin: 0 0 4px 0;
+      font-size: 11px;
+      color: var(--yellow);
+      font-weight: 700;
+    }
+
+    .contact-lines {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 10px;
+      color: #c5d5f7;
+      line-height: 1.5;
+    }
+
+    .contact-lines li strong {
+      display: inline-block;
+      min-width: 3.8em;
+      color: #a8c7fa;
+      font-weight: 700;
+    }
+
+    .contact-lines a {
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .footer-qr {
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .footer-qr img {
+      display: block;
+      width: 60px;
+      height: 60px;
+      border-radius: 6px;
+      background: #fff;
+      padding: 3px;
+    }
+
+    .footer-qr span {
+      display: block;
+      margin-top: 4px;
+      font-size: 8.5px;
+      color: #a8c7fa;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .patent-stamp {
+      border: 2px solid var(--yellow);
+      padding: 8px 12px;
+      border-radius: 6px;
+      text-align: center;
+      color: var(--yellow);
+      transform: rotate(-1.5deg);
+      flex-shrink: 0;
+    }
+
+    .patent-stamp div:first-child {
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .patent-stamp div:last-child {
+      font-size: 12.5px;
+      font-weight: 900;
+      letter-spacing: 0.3px;
+    }
+
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      .a4-page {
+        margin: 0;
+        box-shadow: none;
+        height: 297mm;
+      }
+
+      .header,
+      .tag,
+      .poc-banner,
+      .f-icon,
+      .footer,
+      .footer-qr img,
+      .vs-box,
+      .patent-stamp,
+      .product-visual,
+      .equip-line {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <p class="print-hint no-print">
+    인쇄 설정: A4 비율 · 여백 '없음' · 배경 그래픽 '체크' <button type="button" onclick="window.print()">인쇄 / PDF 저장</button>
+  </p>
+
+  <article class="a4-page">
+    <header class="header">
+      <span class="tag">해양수산부·지자체 생태 복원 사업 제안 (1장 요약)</span>
+      <h1 class="title">
+        초기 SI 부담 최소화, <span>월 구독형(SaaS)</span><br />
+        해양 종자 살포 스마트 관제 솔루션
+      </h1>
+      <p class="subtitle">일괄 구축 대비 예산 절감 · 현장 IoT 단말 및 탑 티어 관제 화면 일원화</p>
+    </header>
+
+    <main class="content">
+      <section class="vs-container" aria-label="기존 방식과 ENX 제안">
+        <div class="vs-box old">
+          <h2 class="vs-title">⚠️ 기존 SI 일괄 구축 방식</h2>
+          <ul class="vs-list">
+            <li>초기 시스템 구축 예산 <b>수억 원 낭비</b></li>
+            <li>기계 장치와 관제 프로그램 <b>분리 운영 (연동 불가)</b></li>
+            <li>살포 면적 및 선박 항적 <b>수기 집계 (검증 공백)</b></li>
+          </ul>
+        </div>
+        <div class="vs-box new">
+          <h2 class="vs-title">💡 ENX 스마트 관제 솔루션</h2>
+          <ul class="vs-list">
+            <li><b>실제 사업 기간 중심 월 구독</b> (초기 예산 리스크 ZERO)</li>
+            <li>파종 기계 ↔ 클라우드 간 <b>자체 IoT 직접 연동</b></li>
+            <li>GPS 단말 기반 <b>살포 궤적 및 면적(ha) 실시간 자동 산출</b></li>
+          </ul>
+        </div>
+      </section>
+
+      <figure class="product-visual">
+        <img src="assets/brochure-dashboard.png" alt="해양 종자 살포 관제 시스템 실제 작동 화면" />
+        <figcaption class="visual-label">▲ ENX SeaRestore 관제 대시보드 실제 구동 화면 (그리드 항로·기상 AI 카드 연동)</figcaption>
+      </figure>
+
+      <section class="poc-banner" aria-label="하드웨어 실증">
+        <div class="poc-icon" aria-hidden="true">📟</div>
+        <div class="poc-text">
+          <h3>하드웨어(IoT) ↔ 웹 서버 간 다이렉트 연동(PoC) 완료</h3>
+          <p>
+            자체 펌웨어 코딩 기반 단말기에서 전송한 종자 투하 신호가 중앙 대시보드 서버의 위도·경도 좌표 및 면적 데이터로 지체 없이 즉시 반영되는 무결점 통신 실증을 마쳤습니다.
+          </p>
+        </div>
+      </section>
+
+      <div class="grid-4">
+        <div class="feature-card">
+          <div class="f-icon" aria-hidden="true">☁️</div>
+          <div class="f-text">
+            <h4>SaaS 클라우드 즉시 도입</h4>
+            <p>서버 구축 없이 URL 접속만으로 관제 즉시 개시 (망분리 연동 확장 고려)</p>
+          </div>
+        </div>
+        <div class="feature-card">
+          <div class="f-icon" aria-hidden="true">📡</div>
+          <div class="f-text">
+            <h4>IoT 단말 이원 수집 기술</h4>
+            <p>현장 기계 신호 다이렉트 수집(특허 출원 기술)으로 데이터 조작 및 중복 누락 방지</p>
+          </div>
+        </div>
+        <div class="feature-card">
+          <div class="f-icon" aria-hidden="true">📊</div>
+          <div class="f-text">
+            <h4>살포 면적(ha) 자동 시각화</h4>
+            <p>투하 좌표를 지도상에 실시간 표출 및 작업 구역 전체 면적 자동 근사 알고리즘 탑재</p>
+          </div>
+        </div>
+        <div class="feature-card">
+          <div class="f-icon" aria-hidden="true">🌤️</div>
+          <div class="f-text">
+            <h4>AI 해상 기상·안전 항로 보조</h4>
+            <p>기상청 API 실시간 연동 안전 경보 가이드 및 장애물 회피(A*) 최적 작업 항로 생성</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="equip-line">
+        ※ 해상 <em>공압식 파종·투하 기계장치</em> · <em>PLC 컨트롤러</em> 등 현장 특수 하드웨어 맞춤형 <em>연동·제어 소프트웨어 추가 코딩 협력 가능</em>
+      </p>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img class="footer-logo-img" src="assets/enx-logo.png" alt="ENX 로고" />
+        <div class="company-info">
+          <h2>(주)이앤엑스 ENX</h2>
+          <p class="rep">대표이사 박원평</p>
+          <ul class="contact-lines">
+            <li><strong>사업자</strong> 302-47-00920</li>
+            <li><strong>연락처</strong> <a href="tel:01046392673">010-4639-2673</a></li>
+            <li><strong>이메일</strong> <a href="mailto:tseizou@naver.com">tseizou@naver.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-qr">
+        <img src="assets/brochure-qr.png" alt="시연 QR" />
+        <span>관제 시연 QR</span>
+      </div>
+      <div class="patent-stamp">
+        <div>단말 이원 수집 관제 원천 기술</div>
+        <div>특허 출원 제10-2026-0086686호</div>
+      </div>
+    </footer>
+  </article>
+</body>
+
+</html>
