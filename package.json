@@ -30,7 +30,8 @@
     "grant:manual:json": "node scripts/grant-watch/manual-notices.mjs --json",
     "growth:advisor": "node scripts/growth-advisor/run.mjs",
     "growth:advisor:execute": "node scripts/growth-advisor/run.mjs --execute",
-    "patent:docx": "python scripts/patent-md-to-docx.py"
+    "patent:docx": "python scripts/patent-md-to-docx.py",
+    "speak": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/speak-korean.ps1"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

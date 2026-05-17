@@ -1,3 +1,6 @@
 {
-  "recommendations": ["emeraldwalk.RunOnSave"]
+  "recommendations": [
+    "emeraldwalk.RunOnSave",
+    "azu.read-aloud-text"
+  ]
 }
