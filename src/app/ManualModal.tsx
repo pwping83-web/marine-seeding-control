@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   X, Phone, Building2, ChevronDown, ChevronRight,
-  Map, Wind, Ship, Download, AlertCircle, BookOpen, Printer,
+  Map, Wind, Ship, Download, AlertCircle, BookOpen, Printer, CreditCard,
 } from "lucide-react";
+import { ManualPricingEmbed } from "./components/ManualPricingEmbed";
 
 // ─── Contact info ─────────────────────────────────────────────────────────────
 const CONTACTS = [
@@ -213,6 +214,22 @@ const SECTIONS: {
     ],
   },
   {
+    id: "pricing",
+    icon: CreditCard,
+    title: "구독 요금제",
+    content: [
+      {
+        heading: "월 구독 · 설치 · 별도 비용",
+        body:
+          "• 월 구독: 선박 1척 기준 ₩500,000 (부가세 별도)\n" +
+          "• 선박 추가: +₩200,000/월·척\n" +
+          "• 초기 세팅·PLC 기본/특수 설치·출장·A/S·추가 코딩: 별도 견적\n\n" +
+          "문의: tseizou@naver.com · 010-4639-2673",
+        custom: <ManualPricingEmbed />,
+      },
+    ],
+  },
+  {
     id: "faq",
     icon: AlertCircle,
     title: "자주 묻는 질문",
@@ -287,6 +304,30 @@ function Section({
   );
 }
 
+/** M 키 — 입력 중이 아닐 때 매뉴얼 열기/닫기 */
+export function useManualHotkey(onToggle: () => void, enabled = true) {
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target;
+      if (
+        el instanceof HTMLElement &&
+        el.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        onToggle();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled, onToggle]);
+}
+
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
 export default function ManualModal({
@@ -352,7 +393,7 @@ export default function ManualModal({
             </div>
             <div>
               <p className="text-white font-bold text-sm leading-tight">사용자 매뉴얼</p>
-              <p className="text-white/35 text-[10px]">해양 종자 살포 관제 시스템 v1.5</p>
+              <p className="text-white/35 text-[10px]">해양 종자 살포 관제 · M 키로 열기</p>
             </div>
           </div>
           <button
@@ -489,7 +530,7 @@ export function ManualButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      title="사용자 매뉴얼"
+      title="사용자 매뉴얼 (M)"
       className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black transition-all hover:scale-110 active:scale-95"
       style={{
         background: "linear-gradient(135deg, #1FB5A8, #0e7490)",

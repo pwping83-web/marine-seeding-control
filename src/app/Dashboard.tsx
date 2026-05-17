@@ -44,7 +44,7 @@ import {
   Route,
 } from "lucide-react";
 import WorkPlanView from "./WorkPlanView";
-import ManualModal, { ManualButton } from "./ManualModal";
+import ManualModal, { ManualButton, useManualHotkey } from "./ManualModal";
 import { MarineLeafletMap } from "./components/MarineLeafletMap";
 import type { MapMode } from "./components/seagrass-map";
 import { OPS_AREA_CENTER, OPS_AREA_MAX_BOUNDS, SIM_SEA_OFFSET } from "./geo/koreaOpsArea";
@@ -864,6 +864,7 @@ export default function Dashboard() {
   const [gpsSensorSimBusy, setGpsSensorSimBusy] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "schedule">("map");
   const [manualOpen, setManualOpen] = useState(false);
+  useManualHotkey(() => setManualOpen((o) => !o));
   const [mapMode, setMapMode] = useState<MapMode>("test");
   const mapModeRef = useRef<MapMode>(mapMode);
   mapModeRef.current = mapMode;

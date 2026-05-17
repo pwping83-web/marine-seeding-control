@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Lock, Mail, ShieldCheck, AlertCircle } from "lucide-react";
-import ManualModal, { ManualButton } from "./ManualModal";
+import ManualModal, { ManualButton, useManualHotkey } from "./ManualModal";
 import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -74,6 +74,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const [mounted, setMounted]   = useState(false);
   const [clock, setClock]       = useState(new Date());
   const [manualOpen, setManualOpen] = useState(false);
+  useManualHotkey(() => setManualOpen((o) => !o));
   // const [certHint, setCertHint] = useState<string | null>(null); // 공인인증서 UI 비활성
 
   useEffect(() => {
