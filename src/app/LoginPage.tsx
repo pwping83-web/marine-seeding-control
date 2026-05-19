@@ -5,11 +5,11 @@ import { BusinessInfoFooter } from "./components/BusinessInfoFooter";
 import { isLocalBrowserHost } from "@/lib/local-host";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { logSiteAccess, marineDbEnabled } from "@/lib/marine-db";
-import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
+// import { isEmailJsAccessNotifyConfigured, sendAccessNotifyEmail } from "@/lib/emailjs-access";
 import {
   fetchClientAccessGeo,
-  formatAccessTimeKorea,
-  geoToAccessLocationLine,
+  // formatAccessTimeKorea,
+  // geoToAccessLocationLine,
 } from "@/lib/fetch-client-access-geo";
 import { reserveSiteAccessLogSlot } from "@/lib/site-access-throttle";
 import { isLoginLocked, recordLoginFailure, resetLoginGuard } from "@/lib/login-brute-guard";
@@ -20,7 +20,7 @@ import {
 } from "@/lib/gov-cert-login";
 */
 
-/** 브라우저(웹)에서 로그인 성공 시에만 EmailJS 접속 알림 — 서버·다른 진입 경로 없음 */
+/* 이메일 알림 비활성화 (주석 처리)
 async function sendLoginSuccessAccessEmail(): Promise<void> {
   if (typeof window === "undefined") return;
   if (!isEmailJsAccessNotifyConfigured()) return;
@@ -34,6 +34,7 @@ async function sendLoginSuccessAccessEmail(): Promise<void> {
     console.warn("[emailjs] 로그인 접속 알림 실패", e);
   }
 }
+*/
 
 // ─── Bubble data for background particles ─────────────────────────────────────
 const BUBBLES: { left: string; size: number; dur: number; delay: number; opacity: number }[] = [
@@ -142,7 +143,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           return;
         }
         resetLoginGuard();
-        void sendLoginSuccessAccessEmail();
+        // void sendLoginSuccessAccessEmail();
         onSuccess();
       } catch (err) {
         setError(err instanceof Error ? err.message : "연결에 실패했습니다.");
@@ -154,7 +155,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     setTimeout(() => {
       setLoading(false);
       resetLoginGuard();
-      void sendLoginSuccessAccessEmail();
+      // void sendLoginSuccessAccessEmail();
       onSuccess();
     }, 600);
   }
