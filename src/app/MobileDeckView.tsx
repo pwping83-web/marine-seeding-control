@@ -224,7 +224,7 @@ function MobileDeckKakaoMap({
         center={{ lat: center[0], lng: center[1] }}
         style={{ width: "100%", height: "100%", minHeight: "40vh" }}
         scrollwheel
-        mapTypeId="HYBRID"
+        mapTypeId="ROADMAP"
         onCreate={handleMapCreate}
       >
         {sessionDrops.map((d, i) => {
